@@ -58,7 +58,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await register({
+      const result = await register({
         email: formData.email,
         password: formData.password,
         displayName: formData.displayName,
@@ -66,8 +66,8 @@ export default function Register() {
         city: formData.city,
         role: formData.role,
       });
-      
-      const redirectPath = getHomeForRole(formData.role);
+
+      const redirectPath = getHomeForRole(result.profile?.role || formData.role);
       navigate(redirectPath, { replace: true });
     } catch (err) {
       console.error("Registration error:", err);

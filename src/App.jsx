@@ -10,6 +10,7 @@ import RenterDashboardLayout from "./components/layouts/RenterDashboardLayout";
 // Auth Pages
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
+import ForgotPassword from "./pages/auth/ForgotPassword";
 
 // Public Pages
 import Home from "./pages/public/Home";
@@ -44,6 +45,15 @@ import RenterMessages from "./pages/renter/Messages";
 import RenterRequests from "./pages/renter/Requests";
 import RenterSettings from "./pages/renter/Settings";
 
+// Admin
+import AdminLayout from "./components/layouts/AdminLayout";
+import AdminOverview from "./pages/admin/Overview";
+import AdminOwners from "./pages/admin/Owners";
+import AdminUsers from "./pages/admin/Users";
+import AdminSubscriptions from "./pages/admin/Subscriptions";
+import AdminAuditLogs from "./pages/admin/AuditLogs";
+import AdminSettings from "./pages/admin/Settings";
+
 // Other
 import NotFound from "./pages/NotFound";
 
@@ -75,6 +85,14 @@ export default function App() {
             element={
               <PublicOnlyRoute>
                 <Register />
+              </PublicOnlyRoute>
+            }
+          />
+          <Route
+            path="forgot-password"
+            element={
+              <PublicOnlyRoute>
+                <ForgotPassword />
               </PublicOnlyRoute>
             }
           />
@@ -124,6 +142,23 @@ export default function App() {
             <Route path="messages" element={<RenterMessages />} />
             <Route path="requests" element={<RenterRequests />} />
             <Route path="settings/*" element={<RenterSettings />} />
+          </Route>
+
+          {/* Admin Console */}
+          <Route
+            path="admin"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AdminOverview />} />
+            <Route path="owners" element={<AdminOwners />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="subscriptions" element={<AdminSubscriptions />} />
+            <Route path="audit" element={<AdminAuditLogs />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           {/* 404 */}

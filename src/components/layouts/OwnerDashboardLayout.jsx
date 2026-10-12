@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Avatar, Badge } from "../ui";
+import NotificationBell from "../notifications/NotificationBell";
 import {
   FiHome,
   FiGrid,
@@ -18,7 +19,6 @@ import {
   FiMenu,
   FiX,
   FiLogOut,
-  FiBell,
   FiChevronDown,
   FiExternalLink,
 } from "react-icons/fi";
@@ -27,12 +27,12 @@ const sidebarLinks = [
   { to: "/dashboard", label: "Overview", icon: FiGrid, end: true },
   { to: "/dashboard/properties", label: "Properties", icon: FiMapPin },
   { to: "/dashboard/listings", label: "Listings", icon: FiList },
-  { to: "/dashboard/applications", label: "Applications", icon: FiInbox, badge: "3" },
+  { to: "/dashboard/applications", label: "Applications", icon: FiInbox },
   { to: "/dashboard/tenancies", label: "Tenancies", icon: FiUsers },
   { to: "/dashboard/tenants", label: "Tenants", icon: FiUsers },
   { to: "/dashboard/rent", label: "Rent & Payments", icon: FiDollarSign },
   { to: "/dashboard/documents", label: "Documents", icon: FiFileText },
-  { to: "/dashboard/messages", label: "Messages", icon: FiMessageSquare, badge: "5" },
+  { to: "/dashboard/messages", label: "Messages", icon: FiMessageSquare },
   { to: "/dashboard/requests", label: "Maintenance", icon: FiTool },
   { to: "/dashboard/analytics", label: "Analytics", icon: FiBarChart2 },
 ];
@@ -42,9 +42,10 @@ const bottomLinks = [
 ];
 
 export default function OwnerDashboardLayout() {
-  const { user, userProfile, logout } = useAuth();
+  const { user, userProfile, ownerProfile, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const publicSitePath = `/owner/${ownerProfile?.publicSlug || userProfile?.id || ""}`;
 
   const handleLogout = async () => {
     await logout();
@@ -88,7 +89,7 @@ export default function OwnerDashboardLayout() {
           {/* Public site link */}
           <div className="border-b border-gray-200 px-4 py-3">
             <Link
-              to={`/owner/${userProfile?.id || ""}`}
+              to={publicSitePath}
               target="_blank"
               className="flex items-center justify-between rounded-lg bg-primary/5 px-3 py-2 text-sm text-primary hover:bg-primary/10"
             >
@@ -166,13 +167,7 @@ export default function OwnerDashboardLayout() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Notifications */}
-            <button className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100">
-              <FiBell className="h-5 w-5" />
-              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
-                3
-              </span>
-            </button>
+            <NotificationBell />
 
             {/* Profile dropdown */}
             <div className="relative">

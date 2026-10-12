@@ -30,14 +30,23 @@ export default function Login() {
     setLoading(true);
     try {
       const result = await login(email, password);
-      
-      // Get user profile to determine redirect
-      const redirectPath = from || getHomeForRole(result.user?.role);
+      const role = result.profile?.role;
+      const redirectPath = from || getHomeForRole(role);
       navigate(redirectPath, { replace: true });
     } catch (err) {
       console.error("Login error:", err);
-      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-        setError("Invalid email or password");
+      if (
+        err.code === "auth/user-not-found" ||
+        err.code === "auth/wrong-password" ||
+        err.code === "auth/invalid-credential"
+      ) {
+        setError(
+          "Invalid email or password. If you have not created an account yet, use Create account — there are no default demo logins."
+        );
+      } else if (err.code === "auth/operation-not-allowed") {
+        setError(
+          "Email/password sign-in is not enabled in Firebase Console → Authentication → Sign-in method."
+        );
       } else if (err.code === "auth/too-many-requests") {
         setError("Too many failed attempts. Please try again later.");
       } else {

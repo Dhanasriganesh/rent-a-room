@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Avatar, Badge } from "../ui";
+import NotificationBell from "../notifications/NotificationBell";
 import {
   FiHome,
   FiGrid,
@@ -12,7 +13,6 @@ import {
   FiFolder,
   FiMessageSquare,
   FiTool,
-  FiBell,
   FiSettings,
   FiMenu,
   FiX,
@@ -28,12 +28,11 @@ const sidebarLinks = [
   { to: "/my-home/tenancy", label: "My Tenancy", icon: FiHome },
   { to: "/my-home/rent", label: "Rent & Payments", icon: FiDollarSign },
   { to: "/my-home/documents", label: "Documents", icon: FiFolder },
-  { to: "/my-home/messages", label: "Messages", icon: FiMessageSquare, badge: "2" },
+  { to: "/my-home/messages", label: "Messages", icon: FiMessageSquare },
   { to: "/my-home/requests", label: "Requests", icon: FiTool },
 ];
 
 const bottomLinks = [
-  { to: "/my-home/notifications", label: "Notifications", icon: FiBell },
   { to: "/my-home/settings", label: "Settings", icon: FiSettings },
 ];
 
@@ -149,13 +148,7 @@ export default function RenterDashboardLayout() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Notifications */}
-            <button className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100">
-              <FiBell className="h-5 w-5" />
-              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
-                2
-              </span>
-            </button>
+            <NotificationBell />
 
             {/* Profile dropdown */}
             <div className="relative">

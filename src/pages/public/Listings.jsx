@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams, useParams } from "react-router-dom";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
-import { db } from "../../lib/firebase";
-import { COLLECTIONS } from "../../lib/firestore";
+import {
+  getPublishedListings,
+  getOwnerByPublicSlug,
+  getOwnerByIdForPublic,
+} from "../../lib/firestore";
 import { Card, Badge, Button, Input, Select, EmptyState, Spinner } from "../../components/ui";
-import { FiMapPin, FiHome, FiDollarSign, FiFilter, FiGrid, FiList, FiHeart, FiSearch } from "react-icons/fi";
+import { FiMapPin, FiHome, FiFilter, FiGrid, FiList, FiHeart, FiSearch } from "react-icons/fi";
 
 const propertyTypes = [
   { value: "", label: "All Types" },
@@ -25,8 +27,10 @@ const priceRanges = [
 
 export default function Listings() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { ownerId } = useParams();
+  const { ownerId: ownerParam } = useParams();
   const [listings, setListings] = useState([]);
+  const [ownerContext, setOwnerContext] = useState(null);
+  const [resolvedOwnerId, setResolvedOwnerId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("grid");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -36,55 +40,79 @@ export default function Listings() {
   const priceFilter = searchParams.get("price") || "";
 
   useEffect(() => {
-    fetchListings();
-  }, [ownerId, cityFilter, typeFilter, priceFilter]);
+    let cancelled = false;
 
-  const fetchListings = async () => {
-    setLoading(true);
-    try {
-      let q = query(
-        collection(db, COLLECTIONS.LISTINGS),
-        where("status", "==", "published"),
-        orderBy("publishedAt", "desc")
-      );
+    async function load() {
+      setLoading(true);
+      try {
+        let ownerId = null;
+        let context = null;
 
-      if (ownerId) {
-        q = query(
-          collection(db, COLLECTIONS.LISTINGS),
-          where("ownerId", "==", ownerId),
-          where("status", "==", "published"),
-          orderBy("publishedAt", "desc")
-        );
+        if (ownerParam) {
+          // Resolve branded site by publicSlug first, then by owner UID
+          context = await getOwnerByPublicSlug(ownerParam);
+          if (!context) {
+            context = await getOwnerByIdForPublic(ownerParam);
+          }
+          ownerId = context?.profile?.userId || context?.site?.ownerId || ownerParam;
+
+          if (
+            context?.site?.publicationStatus === "unpublished" ||
+            context?.profile?.publicationStatus === "unpublished"
+          ) {
+            if (!cancelled) {
+              setOwnerContext(context);
+              setResolvedOwnerId(ownerId);
+              setListings([]);
+              setLoading(false);
+            }
+            return;
+          }
+        }
+
+        const results = await getPublishedListings(ownerId ? { ownerId } : {});
+
+        let filtered = results;
+        if (cityFilter) {
+          filtered = filtered.filter((l) =>
+            l.city?.toLowerCase().includes(cityFilter.toLowerCase())
+          );
+        }
+        if (typeFilter) {
+          filtered = filtered.filter(
+            (l) => l.propertyType === typeFilter || l.unitType === typeFilter
+          );
+        }
+        if (priceFilter) {
+          if (priceFilter.endsWith("+")) {
+            const min = Number(priceFilter.replace("+", ""));
+            filtered = filtered.filter((l) => l.rentAmount >= min);
+          } else {
+            const [min, max] = priceFilter.split("-").map(Number);
+            filtered = filtered.filter(
+              (l) => l.rentAmount >= min && l.rentAmount <= max
+            );
+          }
+        }
+
+        if (!cancelled) {
+          setOwnerContext(context);
+          setResolvedOwnerId(ownerId);
+          setListings(filtered);
+        }
+      } catch (error) {
+        console.error("Error fetching listings:", error);
+        if (!cancelled) setListings([]);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const snapshot = await getDocs(q);
-      let results = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-      // Apply client-side filters
-      if (cityFilter) {
-        results = results.filter((l) =>
-          l.city?.toLowerCase().includes(cityFilter.toLowerCase())
-        );
-      }
-      if (typeFilter) {
-        results = results.filter((l) => l.propertyType === typeFilter);
-      }
-      if (priceFilter) {
-        const [min, max] = priceFilter.split("-").map(Number);
-        results = results.filter((l) => {
-          if (max) return l.rentAmount >= min && l.rentAmount <= max;
-          return l.rentAmount >= min;
-        });
-      }
-
-      setListings(results);
-    } catch (error) {
-      console.error("Error fetching listings:", error);
-      setListings([]);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerParam, cityFilter, typeFilter, priceFilter]);
 
   const updateFilter = (key, value) => {
     const params = new URLSearchParams(searchParams);
@@ -96,25 +124,54 @@ export default function Listings() {
     setSearchParams(params);
   };
 
-  const clearFilters = () => {
-    setSearchParams({});
-  };
-
+  const clearFilters = () => setSearchParams({});
   const hasActiveFilters = cityFilter || typeFilter || priceFilter;
+
+  const brandName =
+    ownerContext?.site?.siteName ||
+    ownerContext?.profile?.siteName ||
+    ownerContext?.user?.displayName;
+  const brandColor =
+    ownerContext?.site?.brandSettings?.primaryColor ||
+    ownerContext?.profile?.brandSettings?.primaryColor ||
+    "#1a3c32";
+  const brandDescription =
+    ownerContext?.site?.brandSettings?.description ||
+    ownerContext?.profile?.brandSettings?.description ||
+    "";
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Header */}
+      {ownerParam && brandName && (
+        <div
+          className="mb-8 rounded-2xl px-6 py-8 text-white"
+          style={{ background: `linear-gradient(135deg, ${brandColor}, ${brandColor}cc)` }}
+        >
+          <p className="text-sm uppercase tracking-wide text-white/80">Owner rental site</p>
+          <h1 className="mt-1 text-3xl font-bold">{brandName}</h1>
+          {brandDescription && (
+            <p className="mt-3 max-w-2xl text-white/90">{brandDescription}</p>
+          )}
+        </div>
+      )}
+
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          {ownerId ? "Available Listings" : "Find Your Perfect Home"}
+        <h1 className={`text-3xl font-bold text-gray-900 ${ownerParam && brandName ? "sr-only" : ""}`}>
+          {ownerParam ? "Available Listings" : "Find Your Perfect Home"}
         </h1>
-        <p className="mt-2 text-gray-500">
-          {listings.length} {listings.length === 1 ? "listing" : "listings"} available
-        </p>
+        {!ownerParam && (
+          <p className="mt-2 text-gray-500">
+            {listings.length} {listings.length === 1 ? "listing" : "listings"} available
+          </p>
+        )}
+        {ownerParam && (
+          <p className="mt-2 text-gray-500">
+            {listings.length} published{" "}
+            {listings.length === 1 ? "listing" : "listings"} from this owner
+          </p>
+        )}
       </div>
 
-      {/* Search & Filters */}
       <div className="mb-6 space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row">
           <div className="relative flex-1">
@@ -138,12 +195,14 @@ export default function Listings() {
             </Button>
             <div className="hidden gap-1 rounded-lg border border-gray-200 p-1 sm:flex">
               <button
+                type="button"
                 onClick={() => setViewMode("grid")}
                 className={`rounded-md p-2 ${viewMode === "grid" ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100"}`}
               >
                 <FiGrid className="h-4 w-4" />
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode("list")}
                 className={`rounded-md p-2 ${viewMode === "list" ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100"}`}
               >
@@ -153,7 +212,6 @@ export default function Listings() {
           </div>
         </div>
 
-        {/* Filter Panel */}
         {filtersOpen && (
           <Card className="animate-slide-down">
             <div className="grid gap-4 sm:grid-cols-3">
@@ -181,7 +239,6 @@ export default function Listings() {
         )}
       </div>
 
-      {/* Listings Grid */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Spinner size="lg" />
@@ -190,7 +247,11 @@ export default function Listings() {
         <EmptyState
           icon={FiHome}
           title="No listings found"
-          description="Try adjusting your filters or search in a different area."
+          description={
+            ownerParam
+              ? "This owner has no published listings yet."
+              : "Try adjusting your filters or search in a different area."
+          }
           action={
             hasActiveFilters && (
               <Button onClick={clearFilters}>Clear Filters</Button>
@@ -206,7 +267,13 @@ export default function Listings() {
           }
         >
           {listings.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} viewMode={viewMode} ownerId={ownerId} />
+            <ListingCard
+              key={listing.id}
+              listing={listing}
+              viewMode={viewMode}
+              ownerParam={ownerParam}
+              resolvedOwnerId={resolvedOwnerId}
+            />
           ))}
         </div>
       )}
@@ -214,9 +281,9 @@ export default function Listings() {
   );
 }
 
-function ListingCard({ listing, viewMode, ownerId }) {
-  const linkPath = ownerId
-    ? `/owner/${ownerId}/${listing.id}`
+function ListingCard({ listing, viewMode, ownerParam }) {
+  const linkPath = ownerParam
+    ? `/owner/${ownerParam}/${listing.id}`
     : `/listings/${listing.id}`;
 
   if (viewMode === "list") {
@@ -243,7 +310,8 @@ function ListingCard({ listing, viewMode, ownerId }) {
             </div>
             <p className="mt-1 flex items-center gap-1 text-sm text-gray-500">
               <FiMapPin className="h-4 w-4" />
-              {listing.city}, {listing.area}
+              {listing.city}
+              {listing.area ? `, ${listing.area}` : ""}
             </p>
             <div className="mt-auto flex items-center gap-4 pt-2 text-sm text-gray-500">
               <span>{listing.bedrooms} bed</span>
@@ -274,16 +342,17 @@ function ListingCard({ listing, viewMode, ownerId }) {
         </div>
         <div className="p-4">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-gray-900 line-clamp-1">
+            <h3 className="line-clamp-1 font-semibold text-gray-900">
               {listing.title}
             </h3>
-            <button className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-500">
+            <span className="rounded-full p-1.5 text-gray-400">
               <FiHeart className="h-4 w-4" />
-            </button>
+            </span>
           </div>
           <p className="mt-1 flex items-center gap-1 text-sm text-gray-500">
             <FiMapPin className="h-4 w-4" />
-            {listing.city}, {listing.area}
+            {listing.city}
+            {listing.area ? `, ${listing.area}` : ""}
           </p>
           <div className="mt-3 flex items-center justify-between">
             <p className="text-lg font-bold text-primary">

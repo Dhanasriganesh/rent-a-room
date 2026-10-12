@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
-import { COLLECTIONS } from "../../lib/firestore";
+import { COLLECTIONS, toggleSavedListing, getRenterProfile } from "../../lib/firestore";
 import { useAuth } from "../../context/AuthContext";
 import { Card, Button, ButtonLink, Badge, Spinner, Alert } from "../../components/ui";
+import ApplyModal from "../../components/applications/ApplyModal";
 import {
   FiMapPin,
   FiHome,
@@ -20,33 +21,55 @@ import {
   FiChevronLeft,
   FiChevronRight,
 } from "react-icons/fi";
+import { FaWhatsapp } from "react-icons/fa";
 
 export default function ListingDetail() {
-  const { id, ownerId } = useParams();
-  const { user } = useAuth();
+  const { id, listingId, ownerId } = useParams();
+  const listingDocId = listingId || id;
+  const { user, isRenter, refreshProfile } = useAuth();
   const [listing, setListing] = useState(null);
   const [owner, setOwner] = useState(null);
+  const [ownerBrand, setOwnerBrand] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
 
   useEffect(() => {
     fetchListing();
-  }, [id]);
+  }, [listingDocId]);
+
+  useEffect(() => {
+    async function checkSaved() {
+      if (!user?.uid || !isRenter || !listingDocId) return;
+      const profile = await getRenterProfile(user.uid);
+      setSaved(Boolean(profile?.savedListings?.includes(listingDocId)));
+    }
+    checkSaved();
+  }, [user?.uid, isRenter, listingDocId]);
 
   const fetchListing = async () => {
+    if (!listingDocId) return;
     setLoading(true);
     try {
-      const listingDoc = await getDoc(doc(db, COLLECTIONS.LISTINGS, id));
+      const listingDoc = await getDoc(doc(db, COLLECTIONS.LISTINGS, listingDocId));
       if (listingDoc.exists()) {
         const listingData = { id: listingDoc.id, ...listingDoc.data() };
         setListing(listingData);
 
-        // Fetch owner info
-        const ownerDoc = await getDoc(doc(db, COLLECTIONS.USERS, listingData.ownerId));
+        const [ownerDoc, profileDoc, siteDoc] = await Promise.all([
+          getDoc(doc(db, COLLECTIONS.USERS, listingData.ownerId)),
+          getDoc(doc(db, COLLECTIONS.OWNER_PROFILES, listingData.ownerId)),
+          getDoc(doc(db, COLLECTIONS.OWNER_SITES, listingData.ownerId)),
+        ]);
+
         if (ownerDoc.exists()) {
           setOwner({ id: ownerDoc.id, ...ownerDoc.data() });
         }
+        setOwnerBrand({
+          profile: profileDoc.exists() ? { id: profileDoc.id, ...profileDoc.data() } : null,
+          site: siteDoc.exists() ? { id: siteDoc.id, ...siteDoc.data() } : null,
+        });
       }
     } catch (error) {
       console.error("Error fetching listing:", error);
@@ -96,6 +119,23 @@ export default function ListingDetail() {
 
   const amenities = listing.amenities || [];
   const images = listing.images || [];
+  const brand =
+    ownerBrand?.site?.brandSettings || ownerBrand?.profile?.brandSettings || {};
+  const siteName =
+    ownerBrand?.site?.siteName ||
+    ownerBrand?.profile?.siteName ||
+    owner?.displayName;
+  const contactEmail = brand.contactEmail || owner?.email;
+  const contactPhone = brand.contactPhone || owner?.phone;
+  const whatsapp = (brand.whatsapp || contactPhone || "").replace(/\D/g, "");
+  const showEmail = brand.showEmail !== false && contactEmail;
+  const showWhatsApp = brand.showWhatsApp !== false && whatsapp;
+  const showChat = brand.showInAppChat !== false;
+  const messagesPath = user
+    ? isRenter
+      ? `/my-home/messages?listing=${listing.id}`
+      : `/dashboard/messages`
+    : `/login?redirect=/listings/${listing.id}`;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -192,7 +232,16 @@ export default function ListingDetail() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setSaved(!saved)}
+                  type="button"
+                  onClick={async () => {
+                    if (!user || !isRenter) {
+                      window.location.href = `/login?redirect=/listings/${listing.id}`;
+                      return;
+                    }
+                    const next = await toggleSavedListing(user.uid, listing.id);
+                    setSaved(next?.includes(listing.id));
+                    await refreshProfile();
+                  }}
                   className={`rounded-full p-2.5 ${
                     saved
                       ? "bg-red-100 text-red-600"
@@ -321,70 +370,114 @@ export default function ListingDetail() {
 
               <hr className="my-4" />
 
-              {user ? (
-                <div className="space-y-3">
-                  <Button className="w-full gap-2">
+              <div className="space-y-3">
+                {showChat && (
+                  <ButtonLink to={messagesPath} className="w-full gap-2">
                     <FiMessageSquare className="h-4 w-4" />
-                    Send Message
-                  </Button>
-                  <Button variant="outline" className="w-full">
-                    Apply for This Home
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <Alert variant="info">
-                    Sign in to contact the owner or apply for this listing.
-                  </Alert>
-                  <ButtonLink to="/login" className="w-full">
-                    Sign In to Apply
+                    In-app chat
                   </ButtonLink>
-                </div>
-              )}
+                )}
+                {showEmail && (
+                  <a
+                    href={`mailto:${contactEmail}?subject=${encodeURIComponent(
+                      `Inquiry: ${listing.title}`
+                    )}`}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border-2 border-primary px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary hover:text-white"
+                  >
+                    <FiMail className="h-4 w-4" />
+                    Email owner
+                  </a>
+                )}
+                {showWhatsApp && (
+                  <a
+                    href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(
+                      `Hi, I'm interested in: ${listing.title}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90"
+                  >
+                    <FaWhatsapp className="h-4 w-4" />
+                    WhatsApp
+                  </a>
+                )}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    if (!user) {
+                      window.location.href = `/login?redirect=/listings/${listing.id}`;
+                      return;
+                    }
+                    setApplyOpen(true);
+                  }}
+                >
+                  Apply for This Home
+                </Button>
+                {!user && (
+                  <Alert variant="info">
+                    Sign in for in-app chat and to track your application.
+                  </Alert>
+                )}
+              </div>
             </Card>
 
             {/* Owner Card */}
-            {owner && (
+            {(owner || siteName) && (
               <Card>
                 <h3 className="font-semibold text-gray-900">Listed by</h3>
                 <div className="mt-4 flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-                    {owner.displayName?.[0]?.toUpperCase() || "O"}
+                    {(siteName || owner?.displayName)?.[0]?.toUpperCase() || "O"}
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">
-                      {owner.displayName}
-                    </p>
+                    <p className="font-medium text-gray-900">{siteName}</p>
                     <p className="text-sm text-gray-500">Property Owner</p>
                   </div>
                 </div>
-                {user && (
+                {(showEmail || contactPhone) && (
                   <div className="mt-4 space-y-2">
-                    {owner.email && (
+                    {showEmail && (
                       <a
-                        href={`mailto:${owner.email}`}
+                        href={`mailto:${contactEmail}`}
                         className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary"
                       >
                         <FiMail className="h-4 w-4" />
-                        {owner.email}
+                        {contactEmail}
                       </a>
                     )}
-                    {owner.phone && (
+                    {contactPhone && (
                       <a
-                        href={`tel:${owner.phone}`}
+                        href={`tel:${contactPhone}`}
                         className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary"
                       >
                         <FiPhone className="h-4 w-4" />
-                        {owner.phone}
+                        {contactPhone}
                       </a>
                     )}
                   </div>
+                )}
+                {ownerId && (
+                  <ButtonLink
+                    to={`/owner/${ownerId}`}
+                    variant="ghost"
+                    size="sm"
+                    className="mt-4 w-full"
+                  >
+                    View all listings from this owner
+                  </ButtonLink>
                 )}
               </Card>
             )}
           </div>
         </div>
       </div>
+
+      <ApplyModal
+        isOpen={applyOpen}
+        onClose={() => setApplyOpen(false)}
+        listing={listing}
+      />
     </div>
   );
 }

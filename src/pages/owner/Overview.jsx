@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { Card, StatsCard, Badge, Button, ButtonLink, Spinner } from "../../components/ui";
+import {
+  getOwnerStats,
+  getApplicationsByOwner,
+  getOpenRequestsByOwner,
+  getRentChargesByOwner,
+} from "../../lib/firestore";
+import { formatCurrency, formatRelativeDate, getStatusConfig, REQUEST_PRIORITIES } from "../../lib/constants";
+import { Card, StatsCard, Badge, ButtonLink, Spinner, EmptyState, StatusBadge } from "../../components/ui";
 import {
   FiHome,
   FiUsers,
@@ -10,46 +17,63 @@ import {
   FiTrendingUp,
   FiArrowRight,
   FiPlus,
-  FiMapPin,
-  FiCalendar,
+  FiTool,
 } from "react-icons/fi";
 
+function toDate(value) {
+  if (!value) return null;
+  if (value?.toDate) return value.toDate();
+  return new Date(value);
+}
+
 export default function OwnerOverview() {
-  const { userProfile } = useAuth();
-  const [loading] = useState(false);
+  const { user, userProfile } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [applications, setApplications] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [upcomingCharges, setUpcomingCharges] = useState([]);
 
-  // Mock data - will be replaced with real data from Firestore
-  const stats = {
-    totalProperties: 5,
-    totalUnits: 12,
-    occupiedUnits: 10,
-    vacantUnits: 2,
-    totalTenants: 15,
-    monthlyRevenue: 8500,
-    pendingRent: 1200,
-    overdueRent: 450,
-    openRequests: 3,
-  };
+  useEffect(() => {
+    let cancelled = false;
 
-  const occupancyRate = Math.round((stats.occupiedUnits / stats.totalUnits) * 100);
+    async function load() {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const [ownerStats, apps, openRequests, charges] = await Promise.all([
+          getOwnerStats(user.uid),
+          getApplicationsByOwner(user.uid),
+          getOpenRequestsByOwner(user.uid),
+          getRentChargesByOwner(user.uid),
+        ]);
 
-  const recentApplications = [
-    { id: 1, name: "John Smith", listing: "Modern Studio in Mitte", status: "new", date: "2 hours ago" },
-    { id: 2, name: "Maria Garcia", listing: "2BR Apartment Kreuzberg", status: "in_review", date: "1 day ago" },
-    { id: 3, name: "Alex Johnson", listing: "Room in Shared Flat", status: "viewing_requested", date: "2 days ago" },
-  ];
+        if (cancelled) return;
 
-  const upcomingRent = [
-    { id: 1, tenant: "Sarah Wilson", unit: "Apt 2B", amount: 850, dueDate: "Nov 1" },
-    { id: 2, tenant: "Mike Brown", unit: "Apt 3A", amount: 950, dueDate: "Nov 1" },
-    { id: 3, tenant: "Lisa Chen", unit: "Room 1", amount: 550, dueDate: "Nov 3" },
-  ];
+        const now = new Date();
+        const upcoming = charges
+          .filter((c) => ["upcoming", "due", "overdue", "partial"].includes(c.status))
+          .map((c) => ({ ...c, _due: toDate(c.dueDate) }))
+          .filter((c) => c._due)
+          .sort((a, b) => a._due - b._due)
+          .slice(0, 5);
 
-  const openMaintenance = [
-    { id: 1, title: "Heating not working", unit: "Apt 2B", priority: "high", date: "Oct 28" },
-    { id: 2, title: "Leaky faucet", unit: "Apt 1A", priority: "medium", date: "Oct 26" },
-    { id: 3, title: "Window won't close", unit: "Room 3", priority: "low", date: "Oct 25" },
-  ];
+        setStats(ownerStats);
+        setApplications(apps.slice(0, 5));
+        setRequests(openRequests.slice(0, 5));
+        setUpcomingCharges(upcoming);
+      } catch (err) {
+        console.error("Failed to load owner overview:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   if (loading) {
     return (
@@ -59,16 +83,31 @@ export default function OwnerOverview() {
     );
   }
 
+  const s = stats || {
+    totalProperties: 0,
+    totalUnits: 0,
+    occupiedUnits: 0,
+    vacantUnits: 0,
+    occupancyRate: 0,
+    activeTenancies: 0,
+    publishedListings: 0,
+    expectedRent: 0,
+    collectedRent: 0,
+    collectionRate: 0,
+    overdueAmount: 0,
+    openRequests: 0,
+    highPriorityRequests: 0,
+  };
+
   return (
     <div className="space-y-6">
-      {/* Welcome Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
             Welcome back, {userProfile?.displayName?.split(" ")[0] || "Owner"}!
           </h1>
           <p className="mt-1 text-gray-500">
-            Here's what's happening with your properties today.
+            Portfolio snapshot from verified Firestore records.
           </p>
         </div>
         <ButtonLink to="/dashboard/listings/new" className="gap-2">
@@ -77,232 +116,176 @@ export default function OwnerOverview() {
         </ButtonLink>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          label="Total Properties"
-          value={stats.totalProperties}
-          icon={FiMapPin}
-          change={`${stats.totalUnits} units`}
-          trend="neutral"
-        />
-        <StatsCard
-          label="Occupancy Rate"
-          value={`${occupancyRate}%`}
+          label="Properties"
+          value={String(s.totalProperties)}
           icon={FiHome}
-          change={`${stats.vacantUnits} vacant`}
-          trend={occupancyRate > 80 ? "up" : "down"}
+          change={`${s.totalUnits} units · ${s.publishedListings} published`}
         />
         <StatsCard
-          label="Monthly Revenue"
-          value={`€${stats.monthlyRevenue.toLocaleString()}`}
+          label="Occupancy"
+          value={`${s.occupancyRate}%`}
+          icon={FiTrendingUp}
+          change={`${s.occupiedUnits} occupied · ${s.vacantUnits} vacant`}
+          trend={s.occupancyRate >= 70 ? "up" : "down"}
+        />
+        <StatsCard
+          label="Rent this month"
+          value={formatCurrency(s.collectedRent)}
           icon={FiDollarSign}
-          change="+12% from last month"
-          trend="up"
+          change={`${formatCurrency(s.expectedRent)} expected · ${s.collectionRate}% collected`}
         />
         <StatsCard
-          label="Active Tenants"
-          value={stats.totalTenants}
-          icon={FiUsers}
-          change={`${openMaintenance.length} open requests`}
-          trend="neutral"
+          label="Open requests"
+          value={String(s.openRequests)}
+          icon={FiAlertCircle}
+          change={
+            s.highPriorityRequests
+              ? `${s.highPriorityRequests} high priority`
+              : `${s.activeTenancies} active tenancies`
+          }
+          trend={s.highPriorityRequests ? "down" : undefined}
         />
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {stats.pendingRent > 0 && (
-          <Card className="border-l-4 border-l-amber-500 bg-amber-50">
-            <div className="flex items-start gap-3">
-              <FiDollarSign className="h-6 w-6 text-amber-600" />
-              <div>
-                <p className="font-medium text-amber-800">Pending Rent</p>
-                <p className="text-2xl font-bold text-amber-900">
-                  €{stats.pendingRent.toLocaleString()}
-                </p>
-                <Link
-                  to="/dashboard/rent"
-                  className="mt-2 inline-flex items-center gap-1 text-sm text-amber-700 hover:text-amber-800"
-                >
-                  View details <FiArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
+      {s.overdueAmount > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-red-800">
+                Overdue rent: {formatCurrency(s.overdueAmount)}
+              </p>
+              <p className="text-sm text-red-700">
+                Based on charge balances after due date — not unconfirmed payment clicks.
+              </p>
             </div>
-          </Card>
-        )}
-        {stats.overdueRent > 0 && (
-          <Card className="border-l-4 border-l-red-500 bg-red-50">
-            <div className="flex items-start gap-3">
-              <FiAlertCircle className="h-6 w-6 text-red-600" />
-              <div>
-                <p className="font-medium text-red-800">Overdue Rent</p>
-                <p className="text-2xl font-bold text-red-900">
-                  €{stats.overdueRent.toLocaleString()}
-                </p>
-                <Link
-                  to="/dashboard/rent?filter=overdue"
-                  className="mt-2 inline-flex items-center gap-1 text-sm text-red-700 hover:text-red-800"
-                >
-                  Take action <FiArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
+            <ButtonLink to="/dashboard/rent" variant="danger" size="sm">
+              Review rent
+            </ButtonLink>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Recent applications</h2>
+            <Link to="/dashboard/applications" className="text-sm font-medium text-primary hover:underline">
+              View all
+            </Link>
+          </div>
+          {applications.length === 0 ? (
+            <EmptyState
+              icon={FiUsers}
+              title="No applications yet"
+              description="When renters apply to your listings, they will show up here."
+            />
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {applications.map((app) => (
+                  <div key={app.id} className="flex items-center justify-between gap-3 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-gray-900">
+                        {app.listingTitle || "Listing application"}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {formatRelativeDate(toDate(app.submittedAt || app.createdAt))}
+                      </p>
+                    </div>
+                    <StatusBadge status={app.status} />
+                  </div>
+                ))}
             </div>
-          </Card>
-        )}
-        {stats.openRequests > 0 && (
-          <Card className="border-l-4 border-l-blue-500 bg-blue-50">
-            <div className="flex items-start gap-3">
-              <FiAlertCircle className="h-6 w-6 text-blue-600" />
-              <div>
-                <p className="font-medium text-blue-800">Open Requests</p>
-                <p className="text-2xl font-bold text-blue-900">
-                  {stats.openRequests}
-                </p>
-                <Link
-                  to="/dashboard/requests"
-                  className="mt-2 inline-flex items-center gap-1 text-sm text-blue-700 hover:text-blue-800"
-                >
-                  View requests <FiArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Requests needing attention</h2>
+            <Link to="/dashboard/requests" className="text-sm font-medium text-primary hover:underline">
+              View all
+            </Link>
+          </div>
+          {requests.length === 0 ? (
+            <EmptyState
+              icon={FiTool}
+              title="No open requests"
+              description="Maintenance and service tickets from tenants will appear here."
+            />
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {requests.map((req) => {
+                const priority = getStatusConfig(REQUEST_PRIORITIES, req.priority);
+                return (
+                  <div key={req.id} className="flex items-center justify-between gap-3 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-gray-900">{req.title}</p>
+                      <p className="text-sm text-gray-500">
+                        {req.category} · {formatRelativeDate(toDate(req.createdAt))}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={priority.color || "default"}>{priority.label}</Badge>
+                      <StatusBadge status={req.status} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </Card>
-        )}
+          )}
+        </Card>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent Applications */}
-        <Card>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Applications</h2>
-            <Link
-              to="/dashboard/applications"
-              className="text-sm font-medium text-primary hover:text-primary-dark"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="mt-4 space-y-4">
-            {recentApplications.map((app) => (
-              <div
-                key={app.id}
-                className="flex items-center justify-between rounded-lg border border-gray-100 p-3"
-              >
-                <div>
-                  <p className="font-medium text-gray-900">{app.name}</p>
-                  <p className="text-sm text-gray-500">{app.listing}</p>
-                </div>
-                <div className="text-right">
-                  <Badge
-                    variant={
-                      app.status === "new"
-                        ? "info"
-                        : app.status === "in_review"
-                        ? "warning"
-                        : "default"
-                    }
-                  >
-                    {app.status.replace("_", " ")}
-                  </Badge>
-                  <p className="mt-1 text-xs text-gray-400">{app.date}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Upcoming Rent */}
-        <Card>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Upcoming Rent Due</h2>
-            <Link
-              to="/dashboard/rent"
-              className="text-sm font-medium text-primary hover:text-primary-dark"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="mt-4 space-y-4">
-            {upcomingRent.map((rent) => (
-              <div
-                key={rent.id}
-                className="flex items-center justify-between rounded-lg border border-gray-100 p-3"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                    <FiCalendar className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{rent.tenant}</p>
-                    <p className="text-sm text-gray-500">{rent.unit}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-gray-900">€{rent.amount}</p>
-                  <p className="text-sm text-gray-500">Due {rent.dueDate}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Open Maintenance Requests */}
-        <Card className="lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Open Maintenance Requests</h2>
-            <Link
-              to="/dashboard/requests"
-              className="text-sm font-medium text-primary hover:text-primary-dark"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
+      <Card>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Upcoming / open rent charges</h2>
+          <Link
+            to="/dashboard/rent"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            Rent dashboard <FiArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+        {upcomingCharges.length === 0 ? (
+          <EmptyState
+            icon={FiDollarSign}
+            title="No open charges"
+            description="Create tenancies and rent charges to track collections here."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-gray-200 text-gray-500">
                 <tr>
-                  <th className="pb-3 font-medium">Issue</th>
-                  <th className="pb-3 font-medium">Unit</th>
-                  <th className="pb-3 font-medium">Priority</th>
-                  <th className="pb-3 font-medium">Date</th>
-                  <th className="pb-3 font-medium"></th>
+                  <th className="px-2 py-2 font-medium">Description</th>
+                  <th className="px-2 py-2 font-medium">Due</th>
+                  <th className="px-2 py-2 font-medium">Amount</th>
+                  <th className="px-2 py-2 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {openMaintenance.map((request) => (
-                  <tr key={request.id}>
-                    <td className="py-3 font-medium text-gray-900">{request.title}</td>
-                    <td className="py-3 text-gray-500">{request.unit}</td>
-                    <td className="py-3">
-                      <Badge
-                        variant={
-                          request.priority === "high"
-                            ? "danger"
-                            : request.priority === "medium"
-                            ? "warning"
-                            : "default"
-                        }
-                      >
-                        {request.priority}
-                      </Badge>
+                {upcomingCharges.map((charge) => (
+                  <tr key={charge.id}>
+                    <td className="px-2 py-3 text-gray-900">
+                      {charge.description || "Rent charge"}
                     </td>
-                    <td className="py-3 text-gray-500">{request.date}</td>
-                    <td className="py-3">
-                      <Link
-                        to={`/dashboard/requests/${request.id}`}
-                        className="text-primary hover:text-primary-dark"
-                      >
-                        View
-                      </Link>
+                    <td className="px-2 py-3 text-gray-600">
+                      {charge._due?.toLocaleDateString("en-GB")}
+                    </td>
+                    <td className="px-2 py-3 font-medium text-gray-900">
+                      {formatCurrency(charge.amount, charge.currency)}
+                    </td>
+                    <td className="px-2 py-3">
+                      <StatusBadge status={charge.status} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </Card>
-      </div>
+        )}
+      </Card>
     </div>
   );
 }

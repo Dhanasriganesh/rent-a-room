@@ -399,8 +399,10 @@ export default function OwnerApplications() {
           <p className="text-gray-600">
             {actionType === "accepted" && (
               <>
-                You're about to accept the application from{" "}
-                <strong>{selectedApp?.renter?.displayName}</strong>. Add an optional note below.
+                You&apos;re about to accept the application from{" "}
+                <strong>{selectedApp?.renter?.displayName}</strong>. After accepting, create a
+                tenancy under <Link to="/dashboard/tenancies" className="text-primary underline">Tenancies</Link>.
+                Add an optional note below.
               </>
             )}
             {actionType === "rejected" && (

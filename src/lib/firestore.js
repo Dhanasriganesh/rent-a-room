@@ -18,7 +18,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 
-// Collection names
+// Collection names — aligned with Section 9 of the product specification
 export const COLLECTIONS = {
   USERS: "users",
   OWNER_PROFILES: "owner_profiles",
@@ -29,6 +29,7 @@ export const COLLECTIONS = {
   LISTING_MEDIA: "listing_media",
   APPLICATIONS: "applications",
   CONVERSATIONS: "conversations",
+  CONVERSATION_MEMBERS: "conversation_members",
   MESSAGES: "messages",
   TENANCIES: "tenancies",
   TENANCY_MEMBERS: "tenancy_members",
@@ -36,13 +37,17 @@ export const COLLECTIONS = {
   DOCUMENTS: "documents",
   RENT_CHARGES: "rent_charges",
   PAYMENTS: "payments",
+  PAYMENT_EVENTS: "payment_events",
+  PAYOUT_ACCOUNTS: "payout_accounts",
   REQUESTS: "requests",
   REQUEST_COMMENTS: "request_comments",
   NOTIFICATIONS: "notifications",
   AUDIT_LOGS: "audit_logs",
+  OWNER_SITES: "owner_sites",
   OWNER_DOMAINS: "owner_domains",
   SUBSCRIPTION_PLANS: "subscription_plans",
   OWNER_SUBSCRIPTIONS: "owner_subscriptions",
+  SUBSCRIPTION_INVOICES: "subscription_invoices",
 };
 
 // ============================================================================
@@ -89,27 +94,71 @@ export async function deleteDocument(collectionName, docId) {
   await deleteDoc(docRef);
 }
 
-export async function queryDocuments(collectionName, conditions = [], sortBy = null, limitCount = null) {
-  let q = collection(db, collectionName);
-  
-  const queryConstraints = [];
-  
-  conditions.forEach(({ field, operator, value }) => {
-    queryConstraints.push(where(field, operator, value));
+function toSortableValue(value) {
+  if (value == null) return 0;
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" || typeof value === "number") return value;
+  return String(value);
+}
+
+function sortResults(results, sortBy) {
+  if (!sortBy) return results;
+  const direction = sortBy.direction === "desc" ? -1 : 1;
+  return [...results].sort((a, b) => {
+    const av = toSortableValue(a[sortBy.field]);
+    const bv = toSortableValue(b[sortBy.field]);
+    if (av < bv) return -1 * direction;
+    if (av > bv) return 1 * direction;
+    return 0;
   });
-  
-  if (sortBy) {
-    queryConstraints.push(orderBy(sortBy.field, sortBy.direction || "asc"));
+}
+
+export async function queryDocuments(collectionName, conditions = [], sortBy = null, limitCount = null) {
+  const runQuery = async (includeOrderBy) => {
+    const queryConstraints = [];
+
+    conditions.forEach(({ field, operator, value }) => {
+      queryConstraints.push(where(field, operator, value));
+    });
+
+    if (includeOrderBy && sortBy) {
+      queryConstraints.push(orderBy(sortBy.field, sortBy.direction || "asc"));
+    }
+
+    // Only push Firestore limit when ordering server-side; otherwise apply after client sort
+    if (includeOrderBy && limitCount) {
+      queryConstraints.push(limit(limitCount));
+    }
+
+    const q = query(collection(db, collectionName), ...queryConstraints);
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  };
+
+  try {
+    let results = await runQuery(Boolean(sortBy));
+    if (!sortBy && limitCount) {
+      return results.slice(0, limitCount);
+    }
+    return results;
+  } catch (err) {
+    // Missing composite index: retry without orderBy, then sort/limit in memory
+    const needsIndex =
+      err?.code === "failed-precondition" ||
+      String(err?.message || "").includes("requires an index");
+
+    if (!needsIndex || !sortBy) throw err;
+
+    console.warn(
+      `[firestore] Missing index for ${collectionName}; sorting client-side. Deploy firestore.indexes.json when ready.`
+    );
+
+    let results = await runQuery(false);
+    results = sortResults(results, sortBy);
+    if (limitCount) results = results.slice(0, limitCount);
+    return results;
   }
-  
-  if (limitCount) {
-    queryConstraints.push(limit(limitCount));
-  }
-  
-  q = query(q, ...queryConstraints);
-  
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
 // ============================================================================
@@ -318,7 +367,17 @@ export async function incrementListingView(listingId) {
 export async function createApplication(renterId, listingId, data) {
   const listing = await getDocument(COLLECTIONS.LISTINGS, listingId);
   if (!listing) throw new Error("Listing not found");
-  
+
+  // Prevent duplicate open applications for the same listing
+  const existing = await queryDocuments(COLLECTIONS.APPLICATIONS, [
+    { field: "renterId", operator: "==", value: renterId },
+    { field: "listingId", operator: "==", value: listingId },
+  ]);
+  const open = existing.find((a) => !["withdrawn", "rejected", "expired"].includes(a.status));
+  if (open) {
+    throw new Error("You already have an open application for this listing");
+  }
+
   const applicationData = {
     renterId,
     listingId,
@@ -336,15 +395,33 @@ export async function createApplication(renterId, listingId, data) {
     decidedAt: null,
     decisionNote: "",
   };
-  
+
   const appId = await createDocument(COLLECTIONS.APPLICATIONS, applicationData);
-  
-  // Increment application count on listing
+
   const docRef = doc(db, COLLECTIONS.LISTINGS, listingId);
   await updateDoc(docRef, {
     applicationCount: increment(1),
   });
-  
+
+  await createNotification(listing.ownerId, "application_new", {
+    title: "New application",
+    message: `New application for "${listing.title}"`,
+    link: "/dashboard/applications",
+    entityType: "application",
+    entityId: appId,
+  });
+
+  // Start a conversation thread linked to this application
+  await getOrCreateConversation({
+    participantIds: [listing.ownerId, renterId],
+    contextType: "application",
+    contextId: appId,
+    listingId,
+    listingTitle: listing.title,
+    initialMessage: data.message || `Hi, I applied for ${listing.title}.`,
+    senderId: renterId,
+  });
+
   return appId;
 }
 
@@ -365,11 +442,24 @@ export async function getApplicationsByRenter(renterId) {
 }
 
 export async function updateApplicationStatus(applicationId, status, note = "") {
+  const application = await getDocument(COLLECTIONS.APPLICATIONS, applicationId);
+  if (!application) throw new Error("Application not found");
+
   await updateDocument(COLLECTIONS.APPLICATIONS, applicationId, {
     status,
     decisionNote: note,
     decidedAt: serverTimestamp(),
   });
+
+  await createNotification(application.renterId, "application_status", {
+    title: "Application update",
+    message: `Your application for "${application.listingTitle}" is now: ${status.replace(/_/g, " ")}`,
+    link: "/my-home/applications",
+    entityType: "application",
+    entityId: applicationId,
+  });
+
+  return application;
 }
 
 // ============================================================================
@@ -661,6 +751,137 @@ export async function reviewDocument(documentId, status, note = "") {
 }
 
 // ============================================================================
+// Messaging Operations
+// ============================================================================
+
+export async function getOrCreateConversation({
+  participantIds,
+  contextType,
+  contextId,
+  listingId = null,
+  listingTitle = "",
+  initialMessage = null,
+  senderId = null,
+}) {
+  const sorted = [...participantIds].sort();
+  const existing = await queryDocuments(COLLECTIONS.CONVERSATIONS, [
+    { field: "contextType", operator: "==", value: contextType },
+    { field: "contextId", operator: "==", value: contextId },
+  ]);
+
+  if (existing.length > 0) {
+    const conversationId = existing[0].id;
+    if (initialMessage && senderId) {
+      await sendMessage(conversationId, senderId, initialMessage);
+    }
+    return conversationId;
+  }
+
+  const conversationId = await createDocument(COLLECTIONS.CONVERSATIONS, {
+    participantIds: sorted,
+    contextType,
+    contextId,
+    listingId,
+    listingTitle,
+    lastMessage: initialMessage || "",
+    lastMessageAt: initialMessage ? serverTimestamp() : null,
+    lastSenderId: senderId || null,
+  });
+
+  await Promise.all(
+    sorted.map((userId) =>
+      createDocument(COLLECTIONS.CONVERSATION_MEMBERS, {
+        conversationId,
+        userId,
+        lastReadAt: null,
+      })
+    )
+  );
+
+  if (initialMessage && senderId) {
+    await sendMessage(conversationId, senderId, initialMessage);
+  }
+
+  return conversationId;
+}
+
+export async function getConversationsForUser(userId) {
+  const conversations = await queryDocuments(
+    COLLECTIONS.CONVERSATIONS,
+    [{ field: "participantIds", operator: "array-contains", value: userId }],
+    { field: "lastMessageAt", direction: "desc" }
+  );
+
+  return Promise.all(
+    conversations.map(async (conv) => {
+      const otherId = (conv.participantIds || []).find((id) => id !== userId);
+      const otherUser = otherId ? await getDocument(COLLECTIONS.USERS, otherId) : null;
+      return { ...conv, otherUser, otherId };
+    })
+  );
+}
+
+export async function sendMessage(conversationId, senderId, body, attachmentKey = null) {
+  const trimmed = String(body || "").trim();
+  if (!trimmed) throw new Error("Message cannot be empty");
+
+  const conversation = await getDocument(COLLECTIONS.CONVERSATIONS, conversationId);
+  if (!conversation) throw new Error("Conversation not found");
+
+  const messageId = await createDocument(COLLECTIONS.MESSAGES, {
+    conversationId,
+    senderId,
+    body: trimmed,
+    attachmentKey,
+    readBy: [senderId],
+  });
+
+  await updateDocument(COLLECTIONS.CONVERSATIONS, conversationId, {
+    lastMessage: trimmed,
+    lastMessageAt: serverTimestamp(),
+    lastSenderId: senderId,
+  });
+
+  const recipients = (conversation.participantIds || []).filter((id) => id !== senderId);
+  await Promise.all(
+    recipients.map(async (userId) => {
+      const recipient = await getDocument(COLLECTIONS.USERS, userId);
+      const messagesPath =
+        recipient?.role === "owner" ? "/dashboard/messages" : "/my-home/messages";
+      return createNotification(userId, "message_new", {
+        title: "New message",
+        message: trimmed.slice(0, 120),
+        link: `${messagesPath}?c=${conversationId}`,
+        entityType: "conversation",
+        entityId: conversationId,
+      });
+    })
+  );
+
+  return messageId;
+}
+
+export async function getMessages(conversationId) {
+  return queryDocuments(
+    COLLECTIONS.MESSAGES,
+    [{ field: "conversationId", operator: "==", value: conversationId }],
+    { field: "createdAt", direction: "asc" }
+  );
+}
+
+export async function markConversationRead(conversationId, userId) {
+  const members = await queryDocuments(COLLECTIONS.CONVERSATION_MEMBERS, [
+    { field: "conversationId", operator: "==", value: conversationId },
+    { field: "userId", operator: "==", value: userId },
+  ]);
+  if (members[0]) {
+    await updateDocument(COLLECTIONS.CONVERSATION_MEMBERS, members[0].id, {
+      lastReadAt: serverTimestamp(),
+    });
+  }
+}
+
+// ============================================================================
 // Notification Operations
 // ============================================================================
 
@@ -712,32 +933,57 @@ export async function markAllNotificationsAsRead(userId) {
 // Real-time Subscriptions
 // ============================================================================
 
-export function subscribeToNotifications(userId, callback) {
+/**
+ * Realtime unread notifications for a user.
+ * Uses a single equality filter (no composite index required), then filters/sorts client-side.
+ */
+export function subscribeToNotifications(userId, callback, onError) {
   const q = query(
     collection(db, COLLECTIONS.NOTIFICATIONS),
     where("userId", "==", userId),
-    where("status", "==", "unread"),
-    orderBy("sentAt", "desc"),
-    limit(20)
+    limit(50)
   );
-  
-  return onSnapshot(q, (snapshot) => {
-    const notifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    callback(notifications);
-  });
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const notifications = snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((n) => n.status === "unread")
+        .sort((a, b) => {
+          const at = a.sentAt?.toMillis?.() ?? (a.sentAt ? new Date(a.sentAt).getTime() : 0);
+          const bt = b.sentAt?.toMillis?.() ?? (b.sentAt ? new Date(b.sentAt).getTime() : 0);
+          return bt - at;
+        })
+        .slice(0, 20);
+      callback(notifications);
+    },
+    (err) => {
+      console.warn("[firestore] notifications listener:", err?.message || err);
+      if (onError) onError(err);
+    }
+  );
 }
 
-export function subscribeToMessages(conversationId, callback) {
+export function subscribeToMessages(conversationId, callback, onError) {
+  // Prefer ordered query; fall back is handled by caller if index is missing
   const q = query(
     collection(db, COLLECTIONS.MESSAGES),
     where("conversationId", "==", conversationId),
     orderBy("createdAt", "asc")
   );
-  
-  return onSnapshot(q, (snapshot) => {
-    const messages = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    callback(messages);
-  });
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      callback(messages);
+    },
+    (err) => {
+      console.warn("[firestore] messages listener:", err?.message || err);
+      if (onError) onError(err);
+    }
+  );
 }
 
 // ============================================================================
@@ -805,7 +1051,7 @@ export async function createAuditLog(actorUserId, action, entityType, entityId, 
 }
 
 // ============================================================================
-// Owner Profile Operations
+// Owner Profile / Site / Domain Operations
 // ============================================================================
 
 export async function getOwnerProfile(userId) {
@@ -814,6 +1060,79 @@ export async function getOwnerProfile(userId) {
 
 export async function updateOwnerProfile(userId, data) {
   return updateDocument(COLLECTIONS.OWNER_PROFILES, userId, data);
+}
+
+export async function getOwnerSite(ownerId) {
+  return getDocument(COLLECTIONS.OWNER_SITES, ownerId);
+}
+
+export async function getOwnerByPublicSlug(slug) {
+  const sites = await queryDocuments(
+    COLLECTIONS.OWNER_SITES,
+    [
+      { field: "publicSlug", operator: "==", value: slug },
+      { field: "publicationStatus", operator: "==", value: "published" },
+    ],
+    null,
+    1
+  );
+  if (!sites.length) return null;
+  const site = sites[0];
+  const profile = await getOwnerProfile(site.ownerId);
+  const user = await getDocument(COLLECTIONS.USERS, site.ownerId);
+  return { site, profile, user };
+}
+
+export async function getOwnerByIdForPublic(ownerId) {
+  const [site, profile, user] = await Promise.all([
+    getOwnerSite(ownerId),
+    getOwnerProfile(ownerId),
+    getDocument(COLLECTIONS.USERS, ownerId),
+  ]);
+  if (!site && !profile) return null;
+  return { site, profile, user };
+}
+
+export async function getPayoutAccount(ownerId) {
+  const accounts = await queryDocuments(
+    COLLECTIONS.PAYOUT_ACCOUNTS,
+    [{ field: "ownerId", operator: "==", value: ownerId }],
+    { field: "createdAt", direction: "desc" },
+    1
+  );
+  return accounts[0] || null;
+}
+
+export async function upsertPayoutAccount(ownerId, data) {
+  const existing = await getPayoutAccount(ownerId);
+  const payload = {
+    ownerId,
+    provider: data.provider || "bank_transfer",
+    accountHolderName: data.accountHolderName || "",
+    iban: data.iban || "",
+    bic: data.bic || "",
+    bankName: data.bankName || "",
+    currency: data.currency || "EUR",
+    verificationStatus: data.verificationStatus || "pending",
+    externalAccountReference: data.externalAccountReference || null,
+    notes: data.notes || "",
+  };
+
+  if (existing) {
+    await updateDocument(COLLECTIONS.PAYOUT_ACCOUNTS, existing.id, payload);
+    return existing.id;
+  }
+  return createDocument(COLLECTIONS.PAYOUT_ACCOUNTS, payload);
+}
+
+export async function getOwnerSubscription(ownerId) {
+  const subs = await queryDocuments(
+    COLLECTIONS.OWNER_SUBSCRIPTIONS,
+    [{ field: "ownerId", operator: "==", value: ownerId }],
+    { field: "createdAt", direction: "desc" },
+    1
+  );
+  return subs[0] || null;
 }
 
 // ============================================================================
@@ -831,16 +1150,23 @@ export async function updateRenterProfile(userId, data) {
 export async function toggleSavedListing(userId, listingId) {
   const profile = await getRenterProfile(userId);
   if (!profile) return;
-  
-  const savedListings = profile.savedListings || [];
+
+  const savedListings = [...(profile.savedListings || [])];
   const index = savedListings.indexOf(listingId);
-  
+
   if (index > -1) {
     savedListings.splice(index, 1);
   } else {
     savedListings.push(listingId);
   }
-  
+
   await updateRenterProfile(userId, { savedListings });
   return savedListings;
+}
+
+export async function assertOwnerOwnsResource(ownerId, resource) {
+  if (!resource || resource.ownerId !== ownerId) {
+    throw new Error("You do not have access to this resource");
+  }
+  return true;
 }

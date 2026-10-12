@@ -14,6 +14,10 @@ export function ProtectedRoute({ children, allowedRoles = [] }) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
+  if (userProfile?.accountStatus === "suspended" || userProfile?.accountStatus === "cancelled") {
+    return <Navigate to="/login" replace />;
+  }
+
   if (allowedRoles.length > 0 && userProfile && !allowedRoles.includes(userProfile.role)) {
     const redirectPath = getHomeForRole(userProfile.role);
     return <Navigate to={redirectPath} replace />;
