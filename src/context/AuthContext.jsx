@@ -17,17 +17,21 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
-import {
-  COLLECTIONS,
-  createAuditLog,
-  tryBootstrapAdmin,
-  claimStaffInvitation,
-} from "../lib/firestore";
+import { COLLECTIONS } from "../lib/collections";
 import {
   ACCOUNT_STATUS,
   DEFAULT_NOTIFICATION_PREFS,
   SUBSCRIPTION_STATUS,
 } from "../lib/statuses";
+
+async function audit(uid, action, entityType, entityId, reason = null, metadata = {}) {
+  try {
+    const { createAuditLog } = await import("../lib/firestore");
+    await createAuditLog(uid, action, entityType, entityId, reason, metadata);
+  } catch {
+    // never block auth flows
+  }
+}
 
 const AuthContext = createContext(null);
 
@@ -97,9 +101,12 @@ export function AuthProvider({ children }) {
           let profile = await fetchUserProfile(firebaseUser.uid);
           profile = await syncEmailVerified(firebaseUser, profile);
           setUserProfile(profile);
+          // Unblock ProtectedRoute as soon as role is known; role profiles load in background
+          setLoading(false);
           if (profile?.role) {
-            await loadRoleProfiles(firebaseUser.uid, profile.role);
+            void loadRoleProfiles(firebaseUser.uid, profile.role);
           }
+          return;
         } catch (err) {
           console.error("Error fetching user profile:", err);
           setUserProfile(null);
@@ -171,6 +178,7 @@ export function AuthProvider({ children }) {
 
       // One-time bootstrap: elevate matching email to admin when configured and unlocked
       try {
+        const { tryBootstrapAdmin } = await import("../lib/firestore");
         await tryBootstrapAdmin(firebaseUser.uid, firebaseUser.email);
       } catch (bootstrapErr) {
         console.warn("Bootstrap admin skipped:", bootstrapErr?.message || bootstrapErr);
@@ -238,13 +246,7 @@ export function AuthProvider({ children }) {
 
       await sendEmailVerification(firebaseUser);
 
-      try {
-        await createAuditLog(firebaseUser.uid, "user.register", "user", firebaseUser.uid, null, {
-          role,
-        });
-      } catch {
-        // Audit write should not block registration
-      }
+      void audit(firebaseUser.uid, "user.register", "user", firebaseUser.uid, null, { role });
 
       let profile = await fetchUserProfile(firebaseUser.uid);
       setUserProfile(profile);
@@ -261,6 +263,7 @@ export function AuthProvider({ children }) {
     if (!auth.currentUser) {
       throw new Error("Sign in before accepting a staff invitation");
     }
+    const { claimStaffInvitation } = await import("../lib/firestore");
     const role = await claimStaffInvitation(
       token,
       auth.currentUser.uid,
@@ -302,11 +305,7 @@ export function AuthProvider({ children }) {
         await loadRoleProfiles(userCredential.user.uid, profile.role);
       }
 
-      try {
-        await createAuditLog(userCredential.user.uid, "user.login", "user", userCredential.user.uid);
-      } catch {
-        // non-blocking
-      }
+      void audit(userCredential.user.uid, "user.login", "user", userCredential.user.uid);
 
       return { user: userCredential.user, profile };
     } catch (err) {
@@ -318,18 +317,14 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       const uid = user?.uid;
+      if (uid) {
+        void audit(uid, "user.logout", "user", uid);
+      }
       await signOut(auth);
       setUser(null);
       setUserProfile(null);
       setOwnerProfile(null);
       setRenterProfile(null);
-      if (uid) {
-        try {
-          await createAuditLog(uid, "user.logout", "user", uid);
-        } catch {
-          // non-blocking
-        }
-      }
     } catch (err) {
       setError(err.message);
       throw err;

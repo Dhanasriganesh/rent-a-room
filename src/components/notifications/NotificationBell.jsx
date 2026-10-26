@@ -43,13 +43,11 @@ export default function NotificationBell() {
         if (!cancelled) setItems(rows);
       },
       () => {
-        // Index / permission issues: poll instead of crashing
+        // Listener failed: poll instead of crashing (do not also poll while snapshot works)
         loadFallback();
-        pollId = window.setInterval(loadFallback, 15000);
+        if (!pollId) pollId = window.setInterval(loadFallback, 15000);
       }
     );
-
-    loadFallback();
 
     return () => {
       cancelled = true;

@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
-import WebsiteMessenger from "../messages/WebsiteMessenger";
 import {
   FiMenu,
   FiX,
@@ -8,6 +7,8 @@ import {
   FiLogIn,
   FiUserPlus,
 } from "react-icons/fi";
+
+const WebsiteMessenger = lazy(() => import("../messages/WebsiteMessenger"));
 
 const publicLinks = [
   { to: "/", label: "Home", icon: FiHome },
@@ -210,7 +211,9 @@ export default function PublicLayout() {
         </div>
       </footer>
 
-      <WebsiteMessenger />
+      <Suspense fallback={null}>
+        <WebsiteMessenger />
+      </Suspense>
     </div>
   );
 }

@@ -81,12 +81,18 @@ export default function RenterApplications() {
           <EmptyState
             icon={FiFileText}
             title="No applications yet"
-            description="When you apply for listings, you can track their status here."
+            description="This page lists applications you submitted online. If a manager already allocated a room to you, open My Tenancy for the room, rent, and deposit."
             action={
-              <ButtonLink to="/my-home/discover" className="gap-2">
-                <FiSearch className="h-4 w-4" />
-                Find Homes
-              </ButtonLink>
+              <div className="flex flex-wrap justify-center gap-2">
+                <ButtonLink to="/my-home/tenancy" className="gap-2">
+                  <FiHome className="h-4 w-4" />
+                  My Tenancy
+                </ButtonLink>
+                <ButtonLink to="/my-home/discover" variant="outline" className="gap-2">
+                  <FiSearch className="h-4 w-4" />
+                  Find Homes
+                </ButtonLink>
+              </div>
             }
           />
         </Card>

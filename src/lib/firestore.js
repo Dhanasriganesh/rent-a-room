@@ -33,63 +33,9 @@ import {
 } from "./constants";
 import { createSandboxWhatsAppProvider } from "./whatsapp/sandboxProvider";
 import { WHATSAPP_MODES, normalizeE164 } from "./whatsapp/adapter";
+import { COLLECTIONS } from "./collections";
 
-// Collection names — aligned with Section 9 of the product specification
-export const COLLECTIONS = {
-  USERS: "users",
-  OWNER_PROFILES: "owner_profiles",
-  RENTER_PROFILES: "renter_profiles",
-  PROPERTIES: "properties",
-  UNITS: "units",
-  LISTINGS: "listings",
-  LISTING_MEDIA: "listing_media",
-  APPLICATIONS: "applications",
-  CONVERSATIONS: "conversations",
-  CONVERSATION_MEMBERS: "conversation_members",
-  MESSAGES: "messages",
-  TENANCIES: "tenancies",
-  TENANCY_MEMBERS: "tenancy_members",
-  DOCUMENT_REQUESTS: "document_requests",
-  DOCUMENTS: "documents",
-  RENT_CHARGES: "rent_charges",
-  PAYMENTS: "payments",
-  PAYMENT_EVENTS: "payment_events",
-  PAYOUT_ACCOUNTS: "payout_accounts",
-  REQUESTS: "requests",
-  REQUEST_COMMENTS: "request_comments",
-  NOTIFICATIONS: "notifications",
-  AUDIT_LOGS: "audit_logs",
-  OWNER_SITES: "owner_sites",
-  OWNER_DOMAINS: "owner_domains",
-  SUBSCRIPTION_PLANS: "subscription_plans",
-  OWNER_SUBSCRIPTIONS: "owner_subscriptions",
-  SUBSCRIPTION_INVOICES: "subscription_invoices",
-  STAFF_INVITATIONS: "staff_invitations",
-  STAFF_PROFILES: "staff_profiles",
-  PLATFORM_SETTINGS: "platform_settings",
-  // Phase 2 — mediation inventory (additive; units remain)
-  OWNERS: "owners",
-  ROOMS: "rooms",
-  BEDS: "beds",
-  RENTAL_OFFERS: "rental_offers",
-  // Phase 3 — allocations (beds remain lock docs for double-book prevention)
-  ALLOCATIONS: "allocations",
-  // Phase 4 — contracts (HTML templates; private Firestore body, not public URLs)
-  CONTRACT_TEMPLATES: "contract_templates",
-  CONTRACTS: "contracts",
-  RENEWAL_REQUESTS: "renewal_requests",
-  // Phase 6 — delivery logs (email sandbox / retries)
-  MESSAGE_DELIVERY_LOGS: "message_delivery_logs",
-  // Phase 7 — WhatsApp (templates + webhook event store; tokens never in client)
-  WHATSAPP_TEMPLATES: "whatsapp_templates",
-  WHATSAPP_WEBHOOK_EVENTS: "whatsapp_webhook_events",
-  // Phase 8 — move lifecycle checklists
-  MOVE_EVENTS: "move_events",
-  // Manager shareable browse catalogs (unlisted public URLs)
-  BROWSE_LINKS: "browse_links",
-  // Tenant onboarding invites (renter chooses their own password)
-  RENTER_INVITATIONS: "renter_invitations",
-};
+export { COLLECTIONS };
 
 export const INBOX_CHANNELS = ["website", "email", "in_app", "whatsapp", "other"];
 export const INBOX_STATUSES = ["open", "pending", "escalated", "resolved"];
@@ -180,7 +126,7 @@ function sortResults(results, sortBy) {
 }
 
 export async function queryDocuments(collectionName, conditions = [], sortBy = null, limitCount = null) {
-  const runQuery = async (includeOrderBy) => {
+  const runQuery = async (includeOrderBy, fetchLimit) => {
     const queryConstraints = [];
 
     conditions.forEach(({ field, operator, value }) => {
@@ -191,9 +137,9 @@ export async function queryDocuments(collectionName, conditions = [], sortBy = n
       queryConstraints.push(orderBy(sortBy.field, sortBy.direction || "asc"));
     }
 
-    // Only push Firestore limit when ordering server-side; otherwise apply after client sort
-    if (includeOrderBy && limitCount) {
-      queryConstraints.push(limit(limitCount));
+    // Always apply a Firestore limit when provided — unbounded scans freeze the UI
+    if (fetchLimit) {
+      queryConstraints.push(limit(fetchLimit));
     }
 
     const q = query(collection(db, collectionName), ...queryConstraints);
@@ -202,11 +148,7 @@ export async function queryDocuments(collectionName, conditions = [], sortBy = n
   };
 
   try {
-    let results = await runQuery(Boolean(sortBy));
-    if (!sortBy && limitCount) {
-      return results.slice(0, limitCount);
-    }
-    return results;
+    return await runQuery(Boolean(sortBy), limitCount);
   } catch (err) {
     // Missing composite index: retry without orderBy, then sort/limit in memory
     const needsIndex =
@@ -219,7 +161,11 @@ export async function queryDocuments(collectionName, conditions = [], sortBy = n
       `[firestore] Missing index for ${collectionName}; sorting client-side. Deploy firestore.indexes.json when ready.`
     );
 
-    let results = await runQuery(false);
+    // Cap fallback reads so a missing index never downloads an entire collection
+    const fallbackLimit = limitCount
+      ? Math.min(Math.max(limitCount * 5, limitCount), 500)
+      : 500;
+    let results = await runQuery(false, fallbackLimit);
     results = sortResults(results, sortBy);
     if (limitCount) results = results.slice(0, limitCount);
     return results;
@@ -265,7 +211,7 @@ export async function getPropertiesByOwner(ownerId) {
 }
 
 export async function getAllProperties() {
-  return queryDocuments(COLLECTIONS.PROPERTIES, [], { field: "createdAt", direction: "desc" });
+  return queryDocuments(COLLECTIONS.PROPERTIES, [], { field: "createdAt", direction: "desc" }, 200);
 }
 
 export async function getPropertiesByOwnerRecord(ownerRecordId) {
@@ -589,10 +535,12 @@ export async function updateApplicationStatus(applicationId, status, note = "", 
 
 export async function getAllApplications(status = null) {
   const conditions = status ? [{ field: "status", operator: "==", value: status }] : [];
-  return queryDocuments(COLLECTIONS.APPLICATIONS, conditions, {
-    field: "submittedAt",
-    direction: "desc",
-  });
+  return queryDocuments(
+    COLLECTIONS.APPLICATIONS,
+    conditions,
+    { field: "submittedAt", direction: "desc" },
+    200
+  );
 }
 
 export async function updateApplicationNotes(applicationId, internalNotes, actorUserId = null) {
@@ -797,10 +745,12 @@ export async function getAllRentCharges(filters = {}) {
   if (filters.allocationId) {
     conditions.push({ field: "allocationId", operator: "==", value: filters.allocationId });
   }
-  return queryDocuments(COLLECTIONS.RENT_CHARGES, conditions, {
-    field: "dueDate",
-    direction: "desc",
-  });
+  return queryDocuments(
+    COLLECTIONS.RENT_CHARGES,
+    conditions,
+    { field: "dueDate", direction: "desc" },
+    300
+  );
 }
 
 export async function getRentChargeByAllocationPeriod(allocationId, period) {
@@ -1484,13 +1434,15 @@ export async function startWebsiteEnquiry({
 }
 
 export async function getStaffInboxConversations(filters = {}) {
-  let rows = await queryDocuments(COLLECTIONS.CONVERSATIONS, [], {
-    field: "lastMessageAt",
-    direction: "desc",
-  });
+  let rows = await queryDocuments(
+    COLLECTIONS.CONVERSATIONS,
+    [],
+    { field: "lastMessageAt", direction: "desc" },
+    100
+  );
   // Include threads with no lastMessageAt yet
   if (!rows.length) {
-    rows = await queryDocuments(COLLECTIONS.CONVERSATIONS, []);
+    rows = await queryDocuments(COLLECTIONS.CONVERSATIONS, [], null, 100);
   }
   if (filters.channel) {
     rows = rows.filter((c) => (c.channel || "in_app") === filters.channel);
@@ -1577,17 +1529,47 @@ export async function sendStaffInboxReply(conversationId, staffUserId, body) {
 
 /**
  * Resolve email endpoint:
- * - Vercel: same-origin /api/send (Gmail secrets in Vercel env, not VITE_)
- * - Local: VITE_EMAIL_API_URL=http://localhost:8787 → …/send
+ * - Production (Vercel): always same-origin /api/send
+ * - Local only: VITE_EMAIL_API_URL=http://localhost:8787 (never baked into prod builds)
  */
 function resolveEmailEndpoint() {
-  const base = String(
+  const configured = String(
     (typeof import.meta !== "undefined" && import.meta.env?.VITE_EMAIL_API_URL) ||
       ""
   ).replace(/\/$/, "");
-  if (!base) return "/api/send";
-  if (base.endsWith("/api/send") || base.endsWith("/send")) return base;
-  return `${base}/send`;
+
+  const hostname =
+    typeof window !== "undefined" ? window.location.hostname : "";
+  const onLocalHost =
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "";
+
+  // A production build must never call a developer laptop (common misconfig)
+  const isLocalDevUrl = /localhost|127\.0\.0\.1/.test(configured);
+  if (!configured || (isLocalDevUrl && !onLocalHost)) {
+    return "/api/send";
+  }
+  if (configured.endsWith("/api/send") || configured.endsWith("/send")) {
+    return configured;
+  }
+  return `${configured}/send`;
+}
+
+async function postEmailApi(endpoint, { to, subject, template, payload }) {
+  const headers = { "Content-Type": "application/json" };
+  if (auth.currentUser) {
+    const idToken = await auth.currentUser.getIdToken();
+    headers.Authorization = `Bearer ${idToken}`;
+  }
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ to, subject, template, payload }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Email API HTTP ${res.status}`);
+  }
+  return { messageId: data.messageId || null, via: "email_api" };
 }
 
 /**
@@ -1595,47 +1577,40 @@ function resolveEmailEndpoint() {
  */
 async function sendLiveEmail({ to, subject, template, payload }) {
   const endpoint = resolveEmailEndpoint();
-  const preferHttpApi =
-    endpoint.startsWith("/") ||
-    endpoint.startsWith("http") ||
-    Boolean(
-      typeof import.meta !== "undefined" && import.meta.env?.VITE_EMAIL_API_URL
-    );
+  const body = { to, subject, template, payload };
+  let lastHttpError = null;
 
-  if (preferHttpApi) {
-    try {
-      const headers = { "Content-Type": "application/json" };
-      if (auth.currentUser) {
-        const idToken = await auth.currentUser.getIdToken();
-        headers.Authorization = `Bearer ${idToken}`;
+  try {
+    return await postEmailApi(endpoint, body);
+  } catch (httpErr) {
+    lastHttpError = httpErr;
+    // If a custom/local URL failed, still try same-origin Vercel function
+    if (endpoint !== "/api/send") {
+      try {
+        return await postEmailApi("/api/send", body);
+      } catch (apiErr) {
+        lastHttpError = apiErr;
       }
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ to, subject, template, payload }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || `Email API HTTP ${res.status}`);
-      }
-      return { messageId: data.messageId || null, via: "email_api" };
-    } catch (httpErr) {
-      if (!endpoint.startsWith("/api/")) throw httpErr;
-      // fall through to Cloud Function
     }
   }
 
   try {
     const sendOutboundEmail = httpsCallable(functions, "sendOutboundEmail");
-    const result = await sendOutboundEmail({ to, subject, template, payload });
+    const result = await sendOutboundEmail(body);
     return {
       messageId: result.data?.messageId || null,
       via: "cloud_function",
     };
   } catch (err) {
+    const httpMsg = lastHttpError?.message || "";
     const msg = err.message || String(err);
     throw new Error(
-      `${msg} — On Vercel set GMAIL_USER, GMAIL_APP_PASSWORD, FIREBASE_WEB_API_KEY, FIREBASE_PROJECT_ID and VITE_EMAIL_MODE=live. Local: npm run email:api`
+      [httpMsg, msg]
+        .filter(Boolean)
+        .join(" · ")
+        .concat(
+          " — On Vercel set GMAIL_USER, GMAIL_APP_PASSWORD, FIREBASE_WEB_API_KEY, FIREBASE_PROJECT_ID and redeploy. Do not set VITE_EMAIL_API_URL in production."
+        )
     );
   }
 }
@@ -2522,7 +2497,7 @@ export async function createOwnerRecord(data, actorUserId = null) {
 }
 
 export async function getAllOwners() {
-  return queryDocuments(COLLECTIONS.OWNERS, [], { field: "createdAt", direction: "desc" });
+  return queryDocuments(COLLECTIONS.OWNERS, [], { field: "createdAt", direction: "desc" }, 200);
 }
 
 export async function getOwnerRecord(ownerId) {
@@ -2572,7 +2547,7 @@ export async function getRoomsByProperty(propertyId) {
 }
 
 export async function getAllRooms() {
-  return queryDocuments(COLLECTIONS.ROOMS, [], { field: "createdAt", direction: "desc" });
+  return queryDocuments(COLLECTIONS.ROOMS, [], { field: "createdAt", direction: "desc" }, 500);
 }
 
 export async function getRoomByLegacyUnitId(unitId) {
@@ -3003,10 +2978,12 @@ export async function allocateBedAtomically(
 
 export async function getAllAllocations(status = null) {
   const conditions = status ? [{ field: "status", operator: "==", value: status }] : [];
-  return queryDocuments(COLLECTIONS.ALLOCATIONS, conditions, {
-    field: "createdAt",
-    direction: "desc",
-  });
+  return queryDocuments(
+    COLLECTIONS.ALLOCATIONS,
+    conditions,
+    { field: "createdAt", direction: "desc" },
+    200
+  );
 }
 
 export async function getAllocationsByProperty(propertyId) {
@@ -3015,6 +2992,96 @@ export async function getAllocationsByProperty(propertyId) {
     [{ field: "propertyId", operator: "==", value: propertyId }],
     { field: "createdAt", direction: "desc" }
   );
+}
+
+/** Active / reserved allocations for a signed-in renter (mediation model). */
+export async function getAllocationsByTenant(tenantUserId) {
+  if (!tenantUserId) return [];
+  return queryDocuments(
+    COLLECTIONS.ALLOCATIONS,
+    [{ field: "tenantUserId", operator: "==", value: tenantUserId }],
+    { field: "createdAt", direction: "desc" },
+    20
+  );
+}
+
+/**
+ * Housing summary for renter dashboards: current allocation + property/room/bed + rent charges.
+ */
+export async function getRenterHousingSummary(tenantUserId, tenantEmail = null) {
+  if (!tenantUserId && !tenantEmail) return null;
+
+  let allocations = tenantUserId ? await getAllocationsByTenant(tenantUserId) : [];
+
+  // Fallback: older rows may only have applicantEmail until login invite links tenantUserId
+  if (!allocations.length && tenantEmail) {
+    const byEmail = await queryDocuments(
+      COLLECTIONS.ALLOCATIONS,
+      [{ field: "applicantEmail", operator: "==", value: String(tenantEmail).trim().toLowerCase() }],
+      { field: "createdAt", direction: "desc" },
+      10
+    );
+    allocations = byEmail;
+    // Self-heal link for next load
+    const linkable = byEmail.find(
+      (a) =>
+        tenantUserId &&
+        !a.tenantUserId &&
+        ["reserved", "active", "pending"].includes(a.status)
+    );
+    if (linkable) {
+      try {
+        await updateDocument(COLLECTIONS.ALLOCATIONS, linkable.id, {
+          tenantUserId,
+        });
+        linkable.tenantUserId = tenantUserId;
+      } catch {
+        /* rules may block; still show via email match */
+      }
+    }
+  }
+
+  const live = allocations.find((a) =>
+    ["reserved", "active", "pending"].includes(a.status)
+  );
+  if (!live) return null;
+
+  const safeGet = async (collectionName, id) => {
+    if (!id) return null;
+    try {
+      return await getDocument(collectionName, id);
+    } catch {
+      return null;
+    }
+  };
+
+  const [property, room, bed, chargesByTenant, chargesByAlloc] = await Promise.all([
+    safeGet(COLLECTIONS.PROPERTIES, live.propertyId),
+    safeGet(COLLECTIONS.ROOMS, live.roomId),
+    safeGet(COLLECTIONS.BEDS, live.bedId),
+    tenantUserId
+      ? queryDocuments(
+          COLLECTIONS.RENT_CHARGES,
+          [{ field: "tenantUserId", operator: "==", value: tenantUserId }],
+          { field: "dueDate", direction: "desc" },
+          24
+        ).catch(() => [])
+      : Promise.resolve([]),
+    queryDocuments(
+      COLLECTIONS.RENT_CHARGES,
+      [{ field: "allocationId", operator: "==", value: live.id }],
+      { field: "dueDate", direction: "desc" },
+      24
+    ).catch(() => []),
+  ]);
+
+  const byId = new Map();
+  [...(chargesByAlloc || []), ...(chargesByTenant || [])].forEach((c) => {
+    byId.set(c.id, c);
+  });
+  const charges = Array.from(byId.values());
+
+  return { allocation: live, property, room, bed, charges };
 }
 
 export async function getAvailableBedsForProperty(propertyId) {
@@ -3449,10 +3516,12 @@ export async function voidContract(contractId, reason, actorUserId) {
 
 export async function getAllContracts(status = null) {
   const conditions = status ? [{ field: "status", operator: "==", value: status }] : [];
-  return queryDocuments(COLLECTIONS.CONTRACTS, conditions, {
-    field: "createdAt",
-    direction: "desc",
-  });
+  return queryDocuments(
+    COLLECTIONS.CONTRACTS,
+    conditions,
+    { field: "createdAt", direction: "desc" },
+    200
+  );
 }
 
 export async function getContractsForTenant(tenantUserId) {
@@ -3944,10 +4013,12 @@ export async function createMaintenanceTicket(data, actorUserId) {
 }
 
 export async function getAllMaintenanceTickets(filters = {}) {
-  let rows = await queryDocuments(COLLECTIONS.REQUESTS, [], {
-    field: "createdAt",
-    direction: "desc",
-  });
+  let rows = await queryDocuments(
+    COLLECTIONS.REQUESTS,
+    [],
+    { field: "createdAt", direction: "desc" },
+    200
+  );
   if (filters.status) rows = rows.filter((r) => r.status === filters.status);
   if (filters.propertyId) rows = rows.filter((r) => r.propertyId === filters.propertyId);
   if (filters.urgency) rows = rows.filter((r) => (r.urgency || r.priority) === filters.urgency);
@@ -4099,10 +4170,12 @@ export async function addMoveLegalFlag(moveEventId, flag, actorUserId) {
 
 export async function getAllMoveEvents(type = null) {
   const conditions = type ? [{ field: "type", operator: "==", value: type }] : [];
-  return queryDocuments(COLLECTIONS.MOVE_EVENTS, conditions, {
-    field: "createdAt",
-    direction: "desc",
-  });
+  return queryDocuments(
+    COLLECTIONS.MOVE_EVENTS,
+    conditions,
+    { field: "createdAt", direction: "desc" },
+    200
+  );
 }
 
 /**
@@ -4123,7 +4196,7 @@ export async function buildOperationalReport({ fromDate = null, toDate = null } 
   ] = await Promise.all([
     getAllProperties(),
     getAllRooms(),
-    queryDocuments(COLLECTIONS.BEDS, []),
+    queryDocuments(COLLECTIONS.BEDS, [], null, 500),
     getAllApplications(),
     getAllAllocations(),
     getAllContracts(),

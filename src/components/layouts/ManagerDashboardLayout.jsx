@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Avatar } from "../ui";
-import NotificationBell from "../notifications/NotificationBell";
 import {
   FiGrid,
   FiHome,
@@ -28,6 +27,8 @@ import {
   FiShield,
   FiLink,
 } from "react-icons/fi";
+
+const NotificationBell = lazy(() => import("../notifications/NotificationBell"));
 
 const COLLAPSE_KEY = "rr_manager_nav_collapsed";
 
@@ -281,7 +282,9 @@ export default function ManagerDashboardLayout() {
             </p>
           </div>
           <div className="manager-topbar__cluster">
-            <NotificationBell />
+            <Suspense fallback={null}>
+              <NotificationBell />
+            </Suspense>
             <Avatar name={userProfile?.displayName || (isSuperAdmin ? "Superadmin" : "Manager")} size="sm" />
             <button
               type="button"

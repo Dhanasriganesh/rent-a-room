@@ -23,9 +23,10 @@ import {
   FiClock,
   FiAlertCircle,
 } from "react-icons/fi";
-import { queryDocuments, getDocument, COLLECTIONS } from "../../lib/firestore";
+import { queryDocuments, getDocument, getRenterHousingSummary, COLLECTIONS } from "../../lib/firestore";
 import {
   APPLICATION_STATUSES,
+  ALLOCATION_STATUSES,
   PAYMENT_STATUSES,
   REQUEST_STATUSES,
   getStatusConfig,
@@ -37,8 +38,7 @@ import {
 export default function RenterOverview() {
   const { user, userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [tenancy, setTenancy] = useState(null);
-  const [unit, setUnit] = useState(null);
+  const [housing, setHousing] = useState(null);
   const [applications, setApplications] = useState([]);
   const [rentCharges, setRentCharges] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -46,59 +46,37 @@ export default function RenterOverview() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [user?.uid]);
+  }, [user?.uid, userProfile?.email, user?.email]);
 
   const fetchDashboardData = async () => {
     if (!user?.uid) return;
     setLoading(true);
     try {
-      // Fetch applications
-      const appsData = await queryDocuments(
-        COLLECTIONS.APPLICATIONS,
-        [{ field: "renterId", operator: "==", value: user.uid }],
-        { field: "submittedAt", direction: "desc" }
-      );
+      const [appsData, housingData, requestsData, renterProfile] = await Promise.all([
+        queryDocuments(
+          COLLECTIONS.APPLICATIONS,
+          [{ field: "renterId", operator: "==", value: user.uid }],
+          { field: "submittedAt", direction: "desc" },
+          10
+        ),
+        getRenterHousingSummary(user.uid, userProfile?.email || user.email),
+        queryDocuments(
+          COLLECTIONS.REQUESTS,
+          [{ field: "tenantUserId", operator: "==", value: user.uid }],
+          { field: "createdAt", direction: "desc" },
+          10
+        ),
+        getDocument(COLLECTIONS.RENTER_PROFILES, user.uid),
+      ]);
+
       setApplications(appsData.slice(0, 5));
-
-      // Fetch tenancy membership
-      const memberships = await queryDocuments(
-        COLLECTIONS.TENANCY_MEMBERS,
-        [
-          { field: "tenantUserId", operator: "==", value: user.uid },
-          { field: "status", operator: "==", value: "active" },
-        ]
+      setHousing(housingData);
+      setRentCharges((housingData?.charges || []).slice(0, 3));
+      setRequests(
+        (requestsData || [])
+          .filter((r) => !["resolved", "closed"].includes(r.status))
+          .slice(0, 3)
       );
-
-      if (memberships.length > 0) {
-        const membership = memberships[0];
-        const tenancyData = await getDocument(COLLECTIONS.TENANCIES, membership.tenancyId);
-        setTenancy(tenancyData);
-
-        if (tenancyData) {
-          // Fetch unit
-          const unitData = await getDocument(COLLECTIONS.UNITS, tenancyData.unitId);
-          setUnit(unitData);
-
-          // Fetch rent charges
-          const chargesData = await queryDocuments(
-            COLLECTIONS.RENT_CHARGES,
-            [{ field: "tenancyId", operator: "==", value: membership.tenancyId }],
-            { field: "dueDate", direction: "desc" }
-          );
-          setRentCharges(chargesData.slice(0, 3));
-
-          // Fetch maintenance requests
-          const requestsData = await queryDocuments(
-            COLLECTIONS.REQUESTS,
-            [{ field: "tenancyId", operator: "==", value: membership.tenancyId }],
-            { field: "createdAt", direction: "desc" }
-          );
-          setRequests(requestsData.filter((r) => !["resolved", "closed"].includes(r.status)).slice(0, 3));
-        }
-      }
-
-      // Get saved listings count from profile
-      const renterProfile = await getDocument(COLLECTIONS.RENTER_PROFILES, user.uid);
       setSavedCount(renterProfile?.savedListings?.length || 0);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -118,6 +96,11 @@ export default function RenterOverview() {
   const activeApplications = applications.filter((a) => !["withdrawn", "rejected", "accepted"].includes(a.status));
   const nextRent = rentCharges.find((c) => c.status !== "paid");
   const openRequests = requests.length;
+  const allocation = housing?.allocation;
+  const allocStatus = allocation
+    ? getStatusConfig(ALLOCATION_STATUSES, allocation.status)
+    : null;
+  const currency = allocation?.currency || "EUR";
 
   return (
     <div className="space-y-6">
@@ -147,17 +130,29 @@ export default function RenterOverview() {
         {nextRent ? (
           <StatsCard
             label="Next Rent Due"
-            value={formatCurrency(nextRent.amount - (nextRent.paidAmount || 0))}
+            value={formatCurrency(
+              Number(nextRent.balance ?? nextRent.amountDue ?? nextRent.amount ?? 0) -
+                (nextRent.balance != null ? 0 : Number(nextRent.paidAmount) || 0),
+              currency
+            )}
             icon={FiDollarSign}
             change={`Due ${formatDate(nextRent.dueDate?.toDate?.() || nextRent.dueDate)}`}
             trend={nextRent.status === "overdue" ? "down" : "neutral"}
           />
+        ) : allocation ? (
+          <StatsCard
+            label="Monthly rent"
+            value={formatCurrency(allocation.agreedMonthlyRent || 0, currency)}
+            icon={FiDollarSign}
+            change={`Deposit ${formatCurrency(allocation.agreedDeposit || 0, currency)}`}
+            trend="neutral"
+          />
         ) : (
           <StatsCard
             label="Rent Status"
-            value="All Paid"
+            value="—"
             icon={FiCheckCircle}
-            trend="up"
+            trend="neutral"
           />
         )}
         <StatsCard
@@ -168,11 +163,11 @@ export default function RenterOverview() {
         />
       </div>
 
-      {/* My Tenancy or Find Home CTA */}
-      {tenancy && unit ? (
+      {/* Allocated room (mediation) or find-home CTA */}
+      {allocation ? (
         <Card>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">My Tenancy</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">My allocated room</h2>
             <Link to="/my-home/tenancy" className="text-sm text-primary hover:text-primary-dark">
               View details
             </Link>
@@ -183,27 +178,36 @@ export default function RenterOverview() {
                 <FiHome className="h-7 w-7 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-gray-900">{unit.unitName}</p>
+                <p className="font-semibold text-gray-900">
+                  {housing.property?.name || "Your property"}
+                </p>
                 <p className="text-sm text-gray-500">
-                  {unit.bedrooms} bed • {unit.bathrooms} bath • {unit.sqm} m²
+                  {[housing.room?.name || housing.room?.label, housing.bed?.label || housing.bed?.name]
+                    .filter(Boolean)
+                    .join(" · ") || "Room reserved"}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-lg font-bold text-primary">{formatCurrency(tenancy.rentAmount)}</p>
+                <p className="text-lg font-bold text-primary">
+                  {formatCurrency(allocation.agreedMonthlyRent || 0, currency)}
+                </p>
                 <p className="text-sm text-gray-500">per month</p>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-between text-sm">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="text-gray-500">
-                Since {formatDate(tenancy.startDate?.toDate?.() || tenancy.startDate)}
+                Deposit {formatCurrency(allocation.agreedDeposit || 0, currency)}
+                {allocation.startDate ? ` · start ${formatDate(allocation.startDate)}` : ""}
               </span>
-              <Badge variant="success">Active</Badge>
+              <Badge variant={allocStatus?.color || "warning"}>
+                {allocStatus?.label || allocation.status}
+              </Badge>
             </div>
           </div>
         </Card>
       ) : (
         <Card className="bg-gradient-to-r from-primary/10 to-secondary/10">
-          <div className="flex flex-col items-center text-center py-4">
+          <div className="flex flex-col items-center py-4 text-center">
             <FiSearch className="h-12 w-12 text-primary" />
             <h2 className="mt-4 text-xl font-bold text-gray-900">Find Your Perfect Home</h2>
             <p className="mt-2 max-w-md text-gray-500">

@@ -174,8 +174,8 @@ service cloud.firestore {
     }
 
     match /properties/{id} {
-      allow read: if isStaff()
-        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      // Renters need property name/address on My Tenancy after allocation
+      allow read: if isSignedIn();
       allow create: if (isOwner() && request.resource.data.ownerId == request.auth.uid)
         || isStaff();
       allow update, delete: if isStaff()
@@ -427,9 +427,7 @@ service cloud.firestore {
     }
 
     match /rooms/{id} {
-      allow read: if isStaff()
-        || (isSignedIn() && resource.data.ownerId == request.auth.uid)
-        || resource.data.status == 'active';
+      allow read: if isSignedIn();
       allow create: if isStaff()
         || (isOwner() && request.resource.data.ownerId == request.auth.uid);
       allow update, delete: if isStaff()
@@ -437,9 +435,8 @@ service cloud.firestore {
     }
 
     match /beds/{id} {
-      allow read: if isStaff()
-        || (isSignedIn() && resource.data.ownerId == request.auth.uid)
-        || resource.data.status == 'available';
+      // Reserved/occupied beds must still be readable by the allocated tenant
+      allow read: if isSignedIn();
       allow create: if isStaff()
         || (isOwner() && request.resource.data.ownerId == request.auth.uid);
       allow update, delete: if isStaff()
@@ -457,7 +454,12 @@ service cloud.firestore {
     // Phase 3 — bed allocations (staff-managed; tenant can read own)
     match /allocations/{id} {
       allow read: if isStaff()
-        || (isSignedIn() && resource.data.tenantUserId == request.auth.uid);
+        || (isSignedIn() && resource.data.tenantUserId == request.auth.uid)
+        || (
+          isSignedIn()
+          && request.auth.token.email != null
+          && resource.data.applicantEmail == request.auth.token.email.lower()
+        );
       allow create: if isStaff();
       allow update: if isStaff()
         || (

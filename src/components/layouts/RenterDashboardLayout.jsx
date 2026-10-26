@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Avatar, Badge } from "../ui";
-import NotificationBell from "../notifications/NotificationBell";
 import {
   FiHome,
   FiGrid,
@@ -19,6 +18,8 @@ import {
   FiLogOut,
   FiChevronDown,
 } from "react-icons/fi";
+
+const NotificationBell = lazy(() => import("../notifications/NotificationBell"));
 
 const sidebarLinks = [
   { to: "/my-home", label: "Overview", icon: FiGrid, end: true },
@@ -154,7 +155,9 @@ export default function RenterDashboardLayout() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <NotificationBell />
+            <Suspense fallback={null}>
+              <NotificationBell />
+            </Suspense>
 
             {/* Profile dropdown */}
             <div className="relative">
