@@ -16,14 +16,52 @@ export const LISTING_STATUS = {
 
 export const APPLICATION_STATUS = {
   NEW: "new",
-  VIEWING_REQUESTED: "viewing_requested",
-  IN_REVIEW: "in_review",
-  MORE_INFO_NEEDED: "more_info_needed",
-  ACCEPTED: "accepted",
+  UNDER_REVIEW: "under_review",
+  IN_REVIEW: "in_review", // legacy alias
+  MORE_INFORMATION_REQUESTED: "more_information_requested",
+  MORE_INFO_NEEDED: "more_info_needed", // legacy alias
+  VIEWING_SCHEDULED: "viewing_scheduled",
+  VIEWING_REQUESTED: "viewing_requested", // legacy alias
+  APPROVED: "approved",
+  ACCEPTED: "accepted", // legacy alias of approved
   REJECTED: "rejected",
   WITHDRAWN: "withdrawn",
+  ALLOCATED: "allocated",
+  CLOSED: "closed",
   EXPIRED: "expired",
 };
+
+export const ALLOCATION_STATUS = {
+  PENDING: "pending",
+  RESERVED: "reserved",
+  ACTIVE: "active",
+  ENDED: "ended",
+  CANCELLED: "cancelled",
+};
+
+export const CONTRACT_STATUS = {
+  DRAFT: "draft",
+  APPROVED: "approved",
+  ISSUED: "issued",
+  SIGNED: "signed",
+  SUPERSEDED: "superseded",
+  VOID: "void",
+};
+
+export const RENEWAL_REQUEST_STATUS = {
+  SUBMITTED: "submitted",
+  UNDER_REVIEW: "under_review",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  FULFILLED: "fulfilled",
+  CANCELLED: "cancelled",
+};
+
+/** Statuses that block a new allocation on the same application */
+export const APPLICATION_TERMINAL = ["allocated", "rejected", "withdrawn", "closed", "expired"];
+
+/** Application must be approved before bed allocation */
+export const APPLICATION_ALLOCATABLE = ["approved", "accepted"];
 
 export const TENANCY_STATUS = {
   DRAFT: "draft",
@@ -77,11 +115,27 @@ export const DOCUMENT_STATUS = {
 
 export const REQUEST_STATUS = {
   NEW: "new",
+  TRIAGED: "triaged",
   ACKNOWLEDGED: "acknowledged",
+  ASSIGNED: "assigned",
   IN_PROGRESS: "in_progress",
+  WAITING: "waiting",
   WAITING_FOR_TENANT: "waiting_for_tenant",
   RESOLVED: "resolved",
   CLOSED: "closed",
+};
+
+export const MOVE_EVENT_TYPE = {
+  MOVE_IN: "move_in",
+  MOVE_OUT: "move_out",
+};
+
+export const MOVE_EVENT_STATUS = {
+  DRAFT: "draft",
+  IN_PROGRESS: "in_progress",
+  PENDING_REVIEW: "pending_review",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
 };
 
 export const ACCOUNT_STATUS = {

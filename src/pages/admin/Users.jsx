@@ -3,13 +3,22 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { COLLECTIONS, updateDocument, createAuditLog } from "../../lib/firestore";
 import { useAuth } from "../../context/AuthContext";
-import { PageHeader, Card, Spinner, Badge, Select, Button } from "../../components/ui";
+import {
+  PageHeader,
+  Card,
+  Spinner,
+  Badge,
+  Select,
+  Button,
+  Alert,
+} from "../../components/ui";
 
 export default function AdminUsers() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [error, setError] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -18,6 +27,7 @@ export default function AdminUsers() {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error(err);
+      setError(err.message || "Failed to load users");
     } finally {
       setLoading(false);
     }
@@ -27,10 +37,10 @@ export default function AdminUsers() {
     load();
   }, []);
 
-  const promoteAdmin = async (userId) => {
-    if (!confirm("Grant platform admin role to this user?")) return;
-    await updateDocument(COLLECTIONS.USERS, userId, { role: "admin" });
-    await createAuditLog(user.uid, "admin.user.promote", "user", userId, "role=admin");
+  const setRole = async (userId, role) => {
+    if (!confirm(`Set this account role to "${role}"? This is audited.`)) return;
+    await updateDocument(COLLECTIONS.USERS, userId, { role });
+    await createAuditLog(user.uid, "admin.user.role", "user", userId, `role=${role}`);
     await load();
   };
 
@@ -46,18 +56,31 @@ export default function AdminUsers() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Users" subtitle="All platform accounts" />
+      <PageHeader
+        title="Users"
+        subtitle="Renter and owner accounts on the platform"
+      />
+
+      {error && <Alert variant="error">{error}</Alert>}
+
       <Select
         className="max-w-xs"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         options={[
-          { value: "admin", label: "Admin" },
+          { value: "", label: "All roles" },
+          { value: "admin", label: "Superadmin (platform)" },
+          { value: "property_manager", label: "Property manager (ops)" },
           { value: "owner", label: "Owner" },
           { value: "renter", label: "Renter" },
         ]}
-        placeholder="All roles"
       />
+
+      <Alert variant="info">
+        Role <strong>admin</strong> opens Platform analytics (superadmin). Role{" "}
+        <strong>property_manager</strong> opens the mediation desk (owners, rooms, share links).
+      </Alert>
+
       <div className="space-y-2">
         {filtered.map((u) => (
           <Card key={u.id} className="!p-4">
@@ -66,14 +89,23 @@ export default function AdminUsers() {
                 <p className="font-medium text-gray-900">{u.displayName || "—"}</p>
                 <p className="text-sm text-gray-500">{u.email}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="info">{u.role}</Badge>
                 <Badge variant={u.accountStatus === "suspended" ? "danger" : "success"}>
                   {u.accountStatus || "active"}
                 </Badge>
-                {u.role !== "admin" && (
-                  <Button size="sm" variant="outline" onClick={() => promoteAdmin(u.id)}>
-                    Make admin
+                {u.id !== user.uid && u.role !== "property_manager" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setRole(u.id, "property_manager")}
+                  >
+                    Make manager
+                  </Button>
+                )}
+                {u.id !== user.uid && u.role !== "admin" && (
+                  <Button size="sm" variant="outline" onClick={() => setRole(u.id, "admin")}>
+                    Make superadmin
                   </Button>
                 )}
               </div>

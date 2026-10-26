@@ -18,6 +18,14 @@ export function ProtectedRoute({ children, allowedRoles = [] }) {
     return <Navigate to="/login" replace />;
   }
 
+  // Manager-provisioned renters must set their own password before using the app
+  if (
+    userProfile?.mustChangePassword &&
+    location.pathname !== "/change-password"
+  ) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   if (allowedRoles.length > 0 && userProfile && !allowedRoles.includes(userProfile.role)) {
     const redirectPath = getHomeForRole(userProfile.role);
     return <Navigate to={redirectPath} replace />;
@@ -34,6 +42,9 @@ export function PublicOnlyRoute({ children }) {
   }
 
   if (user && userProfile) {
+    if (userProfile.mustChangePassword) {
+      return <Navigate to="/change-password" replace />;
+    }
     const redirectPath = getHomeForRole(userProfile.role);
     return <Navigate to={redirectPath} replace />;
   }
@@ -44,12 +55,32 @@ export function PublicOnlyRoute({ children }) {
 export function getHomeForRole(role) {
   switch (role) {
     case "admin":
-      return "/admin";
+      // Platform superadmin — analytics desk at /manager (not ops)
+      return "/manager";
+    case "property_manager":
+      // Day-to-day mediation desk
+      return "/manager";
     case "owner":
       return "/dashboard";
     case "renter":
       return "/my-home";
     default:
       return "/";
+  }
+}
+
+/** Public-header CTA label for the signed-in home */
+export function getHomeLabelForRole(role) {
+  switch (role) {
+    case "admin":
+      return "Superadmin";
+    case "property_manager":
+      return "Manager desk";
+    case "owner":
+      return "Owner dashboard";
+    case "renter":
+      return "My Home";
+    default:
+      return "Account";
   }
 }

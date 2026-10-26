@@ -28,7 +28,7 @@ export function Button({
 }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${buttonVariants[variant]} ${buttonSizes[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${buttonVariants[variant]} ${buttonSizes[size]} ${className}`}
       disabled={disabled || loading}
       {...props}
     >
@@ -73,7 +73,7 @@ export function Input({
         </label>
       )}
       <input
-        className={`w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-gray-500 ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""} ${className}`}
+        className={`w-full rounded-lg border border-gray-300 px-4 py-2.5 text-base text-gray-900 placeholder-gray-400 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-gray-500 sm:text-sm ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""} ${className}`}
         {...props}
       />
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -100,7 +100,7 @@ export function Textarea({
       )}
       <textarea
         rows={rows}
-        className={`w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-gray-500 resize-none ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""} ${className}`}
+        className={`w-full resize-none rounded-lg border border-gray-300 px-4 py-2.5 text-base text-gray-900 placeholder-gray-400 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-gray-500 sm:text-sm ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""} ${className}`}
         {...props}
       />
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -127,7 +127,7 @@ export function Select({
         </label>
       )}
       <select
-        className={`w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-gray-500 ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""} ${className}`}
+        className={`w-full rounded-lg border border-gray-300 px-4 py-2.5 text-base text-gray-900 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-gray-500 sm:text-sm ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""} ${className}`}
         {...props}
       >
         <option value="">{placeholder}</option>
@@ -166,7 +166,7 @@ export function Checkbox({
 
 export function Card({ children, className = "", padding = true }) {
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 shadow-sm ${padding ? "p-5 sm:p-6" : ""} ${className}`}>
+    <div className={`rounded-2xl border border-[#eef0f4] bg-white shadow-[0_1px_2px_rgba(26,29,31,0.04)] ${padding ? "p-5 sm:p-6" : ""} ${className}`}>
       {children}
     </div>
   );
@@ -340,11 +340,11 @@ export function LoadingOverlay({ message = "Loading..." }) {
 // Page header
 export function PageHeader({ title, subtitle, breadcrumbs, actions, className = "" }) {
   return (
-    <div className={`mb-6 ${className}`}>
+    <div className={`mb-5 sm:mb-6 ${className}`}>
       {breadcrumbs && (
-        <nav className="mb-2 text-sm text-gray-500">
+        <nav className="mb-2 overflow-x-auto text-sm text-gray-500 scroll-x">
           {breadcrumbs.map((crumb, index) => (
-            <span key={index}>
+            <span key={index} className="whitespace-nowrap">
               {index > 0 && <span className="mx-2">/</span>}
               {crumb.to ? (
                 <Link to={crumb.to} className="hover:text-primary">
@@ -357,12 +357,20 @@ export function PageHeader({ title, subtitle, breadcrumbs, actions, className = 
           ))}
         </nav>
       )}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{title}</h1>
-          {subtitle && <p className="mt-1 text-gray-500">{subtitle}</p>}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight text-[#1a1d1f] sm:text-2xl lg:text-[1.75rem]">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="mt-1 text-sm leading-relaxed text-[#9a9fa5]">{subtitle}</p>
+          )}
         </div>
-        {actions && <div className="flex flex-wrap gap-3">{actions}</div>}
+        {actions && (
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end sm:gap-3">
+            {actions}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -419,31 +427,37 @@ export function Modal({ isOpen, onClose, title, children, size = "md", className
     md: "max-w-lg",
     lg: "max-w-2xl",
     xl: "max-w-4xl",
-    full: "max-w-full mx-4",
+    full: "max-w-full",
   };
   
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-full items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+      <div className="flex min-h-full items-end justify-center p-0 sm:items-center sm:p-4">
         <div
           className="fixed inset-0 bg-black/50 transition-opacity"
           onClick={onClose}
         />
         <div
-          className={`relative w-full transform rounded-xl bg-white shadow-xl transition-all ${sizes[size]} ${className}`}
+          className={`relative flex max-h-[92dvh] w-full transform flex-col rounded-t-2xl bg-white shadow-xl transition-all sm:max-h-[90vh] sm:rounded-xl ${sizes[size]} ${className}`}
         >
           {title && (
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
+              <h3 className="pr-2 text-base font-semibold text-gray-900 sm:text-lg">
+                {title}
+              </h3>
               <button
+                type="button"
                 onClick={onClose}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                className="touch-target flex items-center justify-center rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Close"
               >
                 <FiX className="h-5 w-5" />
               </button>
             </div>
           )}
-          <div className="px-6 py-4">{children}</div>
+          <div className="overflow-y-auto px-4 py-4 sm:px-6 safe-bottom">
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -454,7 +468,7 @@ export function Modal({ isOpen, onClose, title, children, size = "md", className
 export function Tabs({ tabs, activeTab, onChange, className = "" }) {
   return (
     <div className={`border-b border-gray-200 ${className}`}>
-      <nav className="flex gap-6 overflow-x-auto">
+      <nav className="flex gap-4 overflow-x-auto scroll-x pb-px sm:gap-6">
         {tabs.map((tab) => (
           <button
             key={tab.id}

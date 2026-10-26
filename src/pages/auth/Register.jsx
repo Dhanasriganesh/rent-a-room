@@ -2,24 +2,38 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, USER_ROLES } from "../../context/AuthContext";
 import { getHomeForRole } from "../../components/auth/ProtectedRoute";
+import { assertClientRateLimit, RATE_LIMITS } from "../../lib/rateLimit";
 import { Button, Input, Card, Alert } from "../../components/ui";
-import { FiHome, FiMail, FiLock, FiUser, FiPhone, FiMapPin, FiEye, FiEyeOff, FiUsers, FiKey } from "react-icons/fi";
+import {
+  FiHome,
+  FiMail,
+  FiLock,
+  FiUser,
+  FiPhone,
+  FiMapPin,
+  FiEye,
+  FiEyeOff,
+} from "react-icons/fi";
 
+/**
+ * Public registration is for people looking for a home (renter/applicant).
+ * Staff join via invite link. Property owners are onboarded by the company.
+ */
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  
-  const initialRole = searchParams.get("role") === "owner" ? USER_ROLES.OWNER : USER_ROLES.RENTER;
-  
+  const prefillEmail = searchParams.get("email") || "";
+  const returnInvite = searchParams.get("invite") || "";
+  const returnJoin = searchParams.get("join") || "";
+
   const [formData, setFormData] = useState({
     displayName: "",
-    email: "",
+    email: prefillEmail,
     phone: "",
     city: "",
     password: "",
     confirmPassword: "",
-    role: initialRole,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -35,7 +49,6 @@ export default function Register() {
     e.preventDefault();
     setError("");
 
-    // Validation
     if (!formData.displayName || !formData.email || !formData.password) {
       setError("Please fill in all required fields");
       return;
@@ -58,21 +71,35 @@ export default function Register() {
 
     setLoading(true);
     try {
+      assertClientRateLimit("register", {
+        ...RATE_LIMITS.register,
+        identity: formData.email,
+      });
       const result = await register({
         email: formData.email,
         password: formData.password,
         displayName: formData.displayName,
         phone: formData.phone,
         city: formData.city,
-        role: formData.role,
+        role: USER_ROLES.RENTER,
       });
 
-      const redirectPath = getHomeForRole(result.profile?.role || formData.role);
+      if (returnInvite) {
+        navigate(`/invite/${returnInvite}`, { replace: true });
+        return;
+      }
+
+      if (returnJoin) {
+        navigate(`/join/${returnJoin}`, { replace: true });
+        return;
+      }
+
+      const redirectPath = getHomeForRole(result.profile?.role || USER_ROLES.RENTER);
       navigate(redirectPath, { replace: true });
     } catch (err) {
       console.error("Registration error:", err);
       if (err.code === "auth/email-already-in-use") {
-        setError("An account with this email already exists");
+        setError("An account with this email already exists. Sign in instead.");
       } else if (err.code === "auth/weak-password") {
         setError("Password is too weak. Please use a stronger password.");
       } else if (err.code === "auth/invalid-email") {
@@ -86,51 +113,35 @@ export default function Register() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-hero px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-[#F3EBE3] px-4 py-12">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="mb-8 text-center">
-          <Link to="/" className="inline-flex items-center gap-2">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white">
-              <FiHome className="h-6 w-6 text-primary" />
+          <Link to="/" className="inline-flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#2C1810] text-white">
+              <FiHome className="h-5 w-5" />
             </div>
-            <span className="text-2xl font-bold text-white">HomeRental</span>
+            <span className="text-xl font-semibold tracking-tight text-[#2C1810]">
+              HomeRental
+            </span>
           </Link>
         </div>
 
-        <Card className="animate-slide-up">
+        <Card className="login-glass-card animate-slide-up !border-white/55 !bg-transparent shadow-[0_18px_40px_rgba(44,24,16,0.08)]">
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
-            <p className="mt-2 text-gray-500">Join HomeRental today</p>
+            <h1 className="text-2xl font-bold text-[#2C1810]">Create your account</h1>
+            <p className="mt-2 text-sm text-[#2C1810]/55">
+              {returnInvite
+                ? "Create your login, then accept your staff invitation."
+                : "Find a room and manage your application in one place."}
+            </p>
           </div>
 
-          {/* Role Selector */}
-          <div className="mb-6 grid grid-cols-2 gap-3 rounded-lg bg-gray-100 p-1">
-            <button
-              type="button"
-              onClick={() => setFormData((prev) => ({ ...prev, role: USER_ROLES.RENTER }))}
-              className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all ${
-                formData.role === USER_ROLES.RENTER
-                  ? "bg-white text-primary shadow-sm"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              <FiUsers className="h-4 w-4" />
-              I need a home
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormData((prev) => ({ ...prev, role: USER_ROLES.OWNER }))}
-              className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all ${
-                formData.role === USER_ROLES.OWNER
-                  ? "bg-white text-primary shadow-sm"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              <FiKey className="h-4 w-4" />
-              I have properties
-            </button>
-          </div>
+          {returnInvite && (
+            <Alert variant="info" className="mb-6">
+              You are setting up an account for a staff invitation. After registering, you will
+              return to the invite link to activate your role.
+            </Alert>
+          )}
 
           {error && (
             <Alert variant="error" className="mb-6">
@@ -149,6 +160,7 @@ export default function Register() {
                 onChange={handleChange}
                 className="pl-12"
                 required
+                autoComplete="name"
               />
             </div>
 
@@ -162,6 +174,7 @@ export default function Register() {
                 onChange={handleChange}
                 className="pl-12"
                 required
+                autoComplete="email"
               />
             </div>
 
@@ -175,6 +188,7 @@ export default function Register() {
                   value={formData.phone}
                   onChange={handleChange}
                   className="pl-12"
+                  autoComplete="tel"
                 />
               </div>
               <div className="relative">
@@ -200,17 +214,15 @@ export default function Register() {
                 onChange={handleChange}
                 className="pl-12 pr-12"
                 required
+                autoComplete="new-password"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? (
-                  <FiEyeOff className="h-5 w-5" />
-                ) : (
-                  <FiEye className="h-5 w-5" />
-                )}
+                {showPassword ? <FiEyeOff className="h-5 w-5" /> : <FiEye className="h-5 w-5" />}
               </button>
             </div>
 
@@ -224,6 +236,7 @@ export default function Register() {
                 onChange={handleChange}
                 className="pl-12"
                 required
+                autoComplete="new-password"
               />
             </div>
 
@@ -246,37 +259,25 @@ export default function Register() {
               </span>
             </label>
 
-            <Button
-              type="submit"
-              loading={loading}
-              className="w-full"
-              size="lg"
-            >
-              Create Account
+            <Button type="submit" loading={loading} className="w-full" size="lg">
+              Create account
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-500">
+          <div className="mt-6 space-y-3 text-center text-sm text-gray-500">
+            <p>
               Already have an account?{" "}
-              <Link
-                to="/login"
-                className="font-medium text-primary hover:text-primary-dark"
-              >
+              <Link to="/login" className="font-medium text-primary hover:text-primary-dark">
                 Sign in
               </Link>
             </p>
-          </div>
-        </Card>
-
-        {formData.role === USER_ROLES.OWNER && (
-          <div className="mt-6 rounded-lg bg-white/10 p-4 text-center text-sm text-white">
-            <p className="font-medium">Property Owner Account</p>
-            <p className="mt-1 text-white/80">
-              You'll get your own branded rental website and dashboard to manage properties, tenants, and rent collection.
+            <p className="text-xs text-gray-400">
+              Property owner? Contact the team — accounts are set up by staff.
+              <br />
+              Staff? Use the invitation link you were sent.
             </p>
           </div>
-        )}
+        </Card>
       </div>
     </div>
   );

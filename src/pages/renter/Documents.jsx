@@ -10,6 +10,7 @@ import {
   Input,
   Select,
   Spinner,
+  Alert,
 } from "../../components/ui";
 import {
   FiFileText,
@@ -24,23 +25,34 @@ import {
   FiImage,
   FiFilePlus,
 } from "react-icons/fi";
-import { queryDocuments, COLLECTIONS } from "../../lib/firestore";
+import {
+  queryDocuments,
+  COLLECTIONS,
+  getContractsForTenant,
+  getContractsVisibleToApplicant,
+  createRenewalRequest,
+  getRenewalRequestsForTenant,
+} from "../../lib/firestore";
 import {
   DOCUMENT_TYPES,
   DOCUMENT_STATUSES,
+  CONTRACT_STATUSES,
   getStatusConfig,
   formatDate,
   formatRelativeDate,
 } from "../../lib/constants";
-
 export default function RenterDocuments() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [documentRequests, setDocumentRequests] = useState([]);
+  const [contracts, setContracts] = useState([]);
+  const [renewals, setRenewals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [viewContract, setViewContract] = useState(null);
+  const [renewMsg, setRenewMsg] = useState("");
   const [uploadData, setUploadData] = useState({
     documentType: "id_proof",
     fileName: "",
@@ -61,6 +73,18 @@ export default function RenterDocuments() {
         { field: "createdAt", direction: "desc" }
       );
       setDocuments(docsData);
+
+      const [byTenant, byEmail, renewalRows] = await Promise.all([
+        getContractsForTenant(user.uid),
+        getContractsVisibleToApplicant(userProfile?.email || user.email),
+        getRenewalRequestsForTenant(user.uid),
+      ]);
+      const map = new Map();
+      [...byTenant, ...byEmail]
+        .filter((c) => ["approved", "issued", "signed", "superseded"].includes(c.status))
+        .forEach((c) => map.set(c.id, c));
+      setContracts([...map.values()]);
+      setRenewals(renewalRows);
 
       // Find active tenancy
       const memberships = await queryDocuments(
@@ -83,6 +107,24 @@ export default function RenterDocuments() {
       console.error("Error fetching documents:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const requestRenewal = async (contract) => {
+    try {
+      await createRenewalRequest(
+        {
+          contractId: contract.id,
+          allocationId: contract.allocationId,
+          propertyId: contract.propertyId,
+          message: "Please renew my contract.",
+        },
+        user.uid
+      );
+      setRenewMsg("Renewal request submitted. A manager will review it.");
+      await fetchDocuments();
+    } catch (err) {
+      setRenewMsg(err.message || "Could not submit renewal request");
     }
   };
 
@@ -178,6 +220,59 @@ export default function RenterDocuments() {
           </div>
         </Card>
       )}
+
+      {renewMsg && <Alert variant="info">{renewMsg}</Alert>}
+
+      {/* Contracts (Phase 4) */}
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Contracts</h2>
+        {contracts.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            Approved or issued contracts will appear here. Drafts stay with the manager until approved.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {contracts.map((c) => (
+              <div
+                key={c.id}
+                className="flex flex-col gap-2 rounded-lg border border-gray-100 p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="font-medium text-gray-900">{c.contractReference}</p>
+                  <p className="text-sm text-gray-500">
+                    {CONTRACT_STATUSES.find((s) => s.value === c.status)?.label || c.status}
+                    {" · "}v{c.version}
+                    {c.startDate ? ` · from ${c.startDate}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setViewContract(c)}>
+                    View
+                  </Button>
+                  {["approved", "issued", "signed"].includes(c.status) && (
+                    <Button size="sm" variant="ghost" onClick={() => requestRenewal(c)}>
+                      Request renewal
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {renewals.length > 0 && (
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            <p className="text-xs font-medium uppercase text-gray-400">Your renewal requests</p>
+            <ul className="mt-2 space-y-1 text-sm text-gray-600">
+              {renewals.map((r) => (
+                <li key={r.id}>
+                  {r.status}
+                  {r.requestedStartDate ? ` · ${r.requestedStartDate}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
 
       {/* My Documents */}
       <Card>
@@ -374,6 +469,25 @@ export default function RenterDocuments() {
                 </Button>
               )}
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!viewContract}
+        onClose={() => setViewContract(null)}
+        title={viewContract?.contractReference || "Contract"}
+        size="lg"
+      >
+        {viewContract && (
+          <div className="space-y-3">
+            <Alert variant="warning">
+              This is an issued record for your review. It is not automatically a signed legal
+              document unless completed through the required signing process.
+            </Alert>
+            <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm">
+              {viewContract.body}
+            </pre>
           </div>
         )}
       </Modal>

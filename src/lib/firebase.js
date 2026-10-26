@@ -1,6 +1,7 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "demo-api-key",
@@ -14,4 +15,17 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+/** Callable Cloud Functions (email SMTP lives here — never in the browser) */
+export const functions = getFunctions(app, "us-central1");
+
+/**
+ * Secondary Auth app so staff can create a renter login without signing
+ * themselves out of the primary session.
+ */
+export function getSecondaryAuth() {
+  const existing = getApps().find((a) => a.name === "Secondary");
+  const secondary = existing || initializeApp(firebaseConfig, "Secondary");
+  return getAuth(secondary);
+}
+
 export default app;

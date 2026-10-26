@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute, PublicOnlyRoute } from "./components/auth/ProtectedRoute";
 
@@ -11,11 +11,16 @@ import RenterDashboardLayout from "./components/layouts/RenterDashboardLayout";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
+import AcceptInvite from "./pages/auth/AcceptInvite";
+import JoinInvite from "./pages/auth/JoinInvite";
+import ChangePassword from "./pages/auth/ChangePassword";
+import SuperadminLogin from "./pages/auth/SuperadminLogin";
 
 // Public Pages
 import Home from "./pages/public/Home";
 import Listings from "./pages/public/Listings";
 import ListingDetail from "./pages/public/ListingDetail";
+import BrowseLink from "./pages/public/BrowseLink";
 
 // Owner Dashboard Pages
 import OwnerOverview from "./pages/owner/Overview";
@@ -45,12 +50,23 @@ import RenterMessages from "./pages/renter/Messages";
 import RenterRequests from "./pages/renter/Requests";
 import RenterSettings from "./pages/renter/Settings";
 
-// Admin
-import AdminLayout from "./components/layouts/AdminLayout";
-import AdminOverview from "./pages/admin/Overview";
-import AdminOwners from "./pages/admin/Owners";
+// Single staff desk (admin = the manager)
+import ManagerDashboardLayout from "./components/layouts/ManagerDashboardLayout";
+import ManagerOverview from "./pages/manager/Overview";
+import ManagerOwners from "./pages/manager/Owners";
+import ManagerProperties from "./pages/manager/Properties";
+import ManagerInventory from "./pages/manager/Inventory";
+import ManagerShareLinks from "./pages/manager/ShareLinks";
+import ManagerApplicants from "./pages/manager/Applicants";
+import ManagerAllocations from "./pages/manager/Allocations";
+import ManagerContracts from "./pages/manager/Contracts";
+import ManagerRent from "./pages/manager/Rent";
+import ManagerInbox from "./pages/manager/Inbox";
+import ManagerWhatsApp from "./pages/manager/WhatsApp";
+import ManagerMaintenance from "./pages/manager/Maintenance";
+import ManagerLifecycle from "./pages/manager/Lifecycle";
+import ManagerReports from "./pages/manager/Reports";
 import AdminUsers from "./pages/admin/Users";
-import AdminSubscriptions from "./pages/admin/Subscriptions";
 import AdminAuditLogs from "./pages/admin/AuditLogs";
 import AdminSettings from "./pages/admin/Settings";
 
@@ -62,21 +78,30 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Routes */}
+          {/* Public */}
           <Route element={<PublicLayout />}>
             <Route index element={<Home />} />
             <Route path="listings" element={<Listings />} />
             <Route path="listings/:id" element={<ListingDetail />} />
+            <Route path="browse/:slug" element={<BrowseLink />} />
             <Route path="owner/:ownerId" element={<Listings />} />
             <Route path="owner/:ownerId/:listingId" element={<ListingDetail />} />
           </Route>
 
-          {/* Auth Routes */}
+          {/* Auth */}
           <Route
             path="login"
             element={
               <PublicOnlyRoute>
                 <Login />
+              </PublicOnlyRoute>
+            }
+          />
+          <Route
+            path="superadmin/login"
+            element={
+              <PublicOnlyRoute>
+                <SuperadminLogin />
               </PublicOnlyRoute>
             }
           />
@@ -96,8 +121,11 @@ export default function App() {
               </PublicOnlyRoute>
             }
           />
+          <Route path="invite/:token" element={<AcceptInvite />} />
+          <Route path="join/:token" element={<JoinInvite />} />
+          <Route path="change-password" element={<ChangePassword />} />
 
-          {/* Owner Dashboard Routes */}
+          {/* Owner (property-owner login — separate from admin CRM owners) */}
           <Route
             path="dashboard"
             element={
@@ -123,7 +151,7 @@ export default function App() {
             <Route path="settings/*" element={<OwnerSettings />} />
           </Route>
 
-          {/* Renter Dashboard Routes */}
+          {/* Users (renters) */}
           <Route
             path="my-home"
             element={
@@ -144,24 +172,146 @@ export default function App() {
             <Route path="settings/*" element={<RenterSettings />} />
           </Route>
 
-          {/* Admin Console */}
+          {/* Single admin desk — you are the manager */}
           <Route
-            path="admin"
+            path="manager"
             element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminLayout />
+              <ProtectedRoute allowedRoles={["admin", "property_manager"]}>
+                <ManagerDashboardLayout />
               </ProtectedRoute>
             }
           >
-            <Route index element={<AdminOverview />} />
-            <Route path="owners" element={<AdminOwners />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="subscriptions" element={<AdminSubscriptions />} />
-            <Route path="audit" element={<AdminAuditLogs />} />
-            <Route path="settings" element={<AdminSettings />} />
+            <Route index element={<ManagerOverview />} />
+            {/* Operations — property managers only (not superadmin) */}
+            <Route
+              path="owners"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerOwners />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="properties"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerProperties />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="inventory"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerInventory />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="share-links"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerShareLinks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="applicants"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerApplicants />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="allocations"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerAllocations />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="contracts"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerContracts />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="rent"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerRent />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="messages"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerInbox />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="whatsapp"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerWhatsApp />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="maintenance"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerMaintenance />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="lifecycle"
+              element={
+                <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ManagerLifecycle />
+                </ProtectedRoute>
+              }
+            />
+            {/* Analytics — both roles */}
+            <Route path="reports" element={<ManagerReports />} />
+            {/* Superadmin control plane */}
+            <Route
+              path="users"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminUsers />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="audit"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminAuditLogs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminSettings />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
-          {/* 404 */}
+          {/* Old /admin URLs → same desk */}
+          <Route path="admin" element={<Navigate to="/manager" replace />} />
+          <Route path="admin/*" element={<Navigate to="/manager" replace />} />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

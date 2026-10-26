@@ -7,12 +7,21 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:phase23": "node scripts/verify-phase23.mjs",
+    "verify:phase9": "node scripts/verify-phase9.mjs",
+    "verify:all": "node scripts/verify-all-phases.mjs",
+    "smoke:phase23": "node scripts/smoke-phase23.mjs",
+    "smoke:phase489": "node scripts/smoke-phases489.mjs",
+    "seed:superadmin": "node scripts/seed-superadmin.mjs",
+    "seed:manager": "node scripts/seed-manager.mjs",
+    "email:api": "node server/email-api.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
     "date-fns": "^4.4.0",
     "firebase": "^13.0.0",
+    "nodemailer": "^6.10.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-icons": "^5.7.0",

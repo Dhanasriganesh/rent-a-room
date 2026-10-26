@@ -134,7 +134,7 @@ export default function Listings() {
   const brandColor =
     ownerContext?.site?.brandSettings?.primaryColor ||
     ownerContext?.profile?.brandSettings?.primaryColor ||
-    "#1a3c32";
+    "#2c1810";
   const brandDescription =
     ownerContext?.site?.brandSettings?.description ||
     ownerContext?.profile?.brandSettings?.description ||
@@ -156,16 +156,20 @@ export default function Listings() {
       )}
 
       <div className="mb-8">
-        <h1 className={`text-3xl font-bold text-gray-900 ${ownerParam && brandName ? "sr-only" : ""}`}>
-          {ownerParam ? "Available Listings" : "Find Your Perfect Home"}
+        <h1
+          className={`font-serif text-3xl font-medium tracking-tight text-[#2C1810] sm:text-4xl ${
+            ownerParam && brandName ? "sr-only" : ""
+          }`}
+        >
+          {ownerParam ? "Available rooms" : "Browse rooms"}
         </h1>
         {!ownerParam && (
-          <p className="mt-2 text-gray-500">
+          <p className="mt-2 text-[#2C1810]/55">
             {listings.length} {listings.length === 1 ? "listing" : "listings"} available
           </p>
         )}
         {ownerParam && (
-          <p className="mt-2 text-gray-500">
+          <p className="mt-2 text-[#2C1810]/55">
             {listings.length} published{" "}
             {listings.length === 1 ? "listing" : "listings"} from this owner
           </p>
@@ -250,7 +254,7 @@ export default function Listings() {
           description={
             ownerParam
               ? "This owner has no published listings yet."
-              : "Try adjusting your filters or search in a different area."
+              : "Mediation rooms are shared via private manager links (/browse/…), not this public list. Owner-published listings appear here when available."
           }
           action={
             hasActiveFilters && (

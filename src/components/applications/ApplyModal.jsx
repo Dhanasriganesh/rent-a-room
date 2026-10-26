@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { createApplication } from "../../lib/firestore";
+import { assertClientRateLimit, RATE_LIMITS } from "../../lib/rateLimit";
 import { Modal, Input, Textarea, Button, Alert, Checkbox } from "../ui";
 
 export default function ApplyModal({ isOpen, onClose, listing }) {
@@ -40,6 +41,10 @@ export default function ApplyModal({ isOpen, onClose, listing }) {
 
     setSaving(true);
     try {
+      assertClientRateLimit("apply", {
+        ...RATE_LIMITS.apply,
+        identity: user.uid,
+      });
       await createApplication(user.uid, listing.id, {
         desiredMoveIn: form.desiredMoveIn,
         message: form.message.trim(),

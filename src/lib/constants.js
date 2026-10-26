@@ -50,13 +50,134 @@ export const LISTING_STATUSES = [
 // Application Statuses
 export const APPLICATION_STATUSES = [
   { value: "new", label: "New", color: "info" },
-  { value: "viewing_requested", label: "Viewing Requested", color: "warning" },
-  { value: "in_review", label: "In Review", color: "warning" },
-  { value: "more_info_needed", label: "More Info Needed", color: "warning" },
+  { value: "under_review", label: "Under review", color: "warning" },
+  { value: "in_review", label: "In review", color: "warning" },
+  { value: "more_information_requested", label: "More info requested", color: "warning" },
+  { value: "more_info_needed", label: "More info needed", color: "warning" },
+  { value: "viewing_scheduled", label: "Viewing scheduled", color: "warning" },
+  { value: "viewing_requested", label: "Viewing requested", color: "warning" },
+  { value: "approved", label: "Approved", color: "success" },
   { value: "accepted", label: "Accepted", color: "success" },
+  { value: "allocated", label: "Allocated", color: "primary" },
   { value: "rejected", label: "Rejected", color: "danger" },
   { value: "withdrawn", label: "Withdrawn", color: "default" },
+  { value: "closed", label: "Closed", color: "default" },
 ];
+
+export const ALLOCATION_STATUSES = [
+  { value: "pending", label: "Pending", color: "default" },
+  { value: "reserved", label: "Reserved", color: "warning" },
+  { value: "active", label: "Active", color: "success" },
+  { value: "ended", label: "Ended", color: "default" },
+  { value: "cancelled", label: "Cancelled", color: "danger" },
+];
+
+export const CONTRACT_STATUSES = [
+  { value: "draft", label: "Draft", color: "default" },
+  { value: "approved", label: "Approved", color: "success" },
+  { value: "issued", label: "Issued", color: "info" },
+  { value: "signed", label: "Signed", color: "primary" },
+  { value: "superseded", label: "Superseded", color: "warning" },
+  { value: "void", label: "Void", color: "danger" },
+];
+
+export const RENEWAL_REQUEST_STATUSES = [
+  { value: "submitted", label: "Submitted", color: "info" },
+  { value: "under_review", label: "Under review", color: "warning" },
+  { value: "approved", label: "Approved", color: "success" },
+  { value: "rejected", label: "Rejected", color: "danger" },
+  { value: "fulfilled", label: "Fulfilled", color: "primary" },
+  { value: "cancelled", label: "Cancelled", color: "default" },
+];
+
+/** Named placeholders for contract templates (Phase 4) */
+export const CONTRACT_PLACEHOLDERS = [
+  { key: "owner_legal_name", label: "Owner legal name", required: true },
+  { key: "tenant_full_name", label: "Tenant full name", required: true },
+  { key: "property_address", label: "Property address", required: true },
+  { key: "room_label", label: "Room label", required: true },
+  { key: "bed_label", label: "Bed label", required: true },
+  { key: "contract_start_date", label: "Start date", required: true },
+  { key: "contract_end_date", label: "End date", required: false },
+  { key: "monthly_rent", label: "Monthly rent", required: true },
+  { key: "security_deposit", label: "Security deposit", required: true },
+  { key: "contract_reference", label: "Contract reference", required: true },
+  { key: "currency", label: "Currency", required: false },
+];
+
+export const MAINTENANCE_CATEGORIES = [
+  { value: "plumbing", label: "Plumbing" },
+  { value: "electrical", label: "Electrical" },
+  { value: "heating", label: "Heating / HVAC" },
+  { value: "appliance", label: "Appliance" },
+  { value: "furniture", label: "Furniture" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "keys", label: "Keys / access" },
+  { value: "other", label: "Other" },
+];
+
+export const MAINTENANCE_URGENCY = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent — needs human escalation" },
+];
+
+export const MAINTENANCE_STATUSES = [
+  { value: "new", label: "New" },
+  { value: "triaged", label: "Triaged" },
+  { value: "assigned", label: "Assigned" },
+  { value: "in_progress", label: "In progress" },
+  { value: "waiting", label: "Waiting" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
+];
+
+export const MOVE_IN_CHECKLIST_ITEMS = [
+  { key: "contract_checked", label: "Contract status checked" },
+  { key: "signatures_recorded", label: "Required signatures/approvals recorded" },
+  { key: "allocation_confirmed", label: "Start date and allocation confirmed" },
+  { key: "deposit_recorded", label: "Payment/deposit status recorded (if applicable)" },
+  { key: "keys_handover", label: "Key handover / check-in appointment recorded" },
+  { key: "condition_checklist", label: "Condition/inventory checklist completed" },
+  { key: "instructions_sent", label: "Tenant received approved instructions" },
+];
+
+export const MOVE_OUT_CHECKLIST_ITEMS = [
+  { key: "notice_recorded", label: "Intended move-out date recorded" },
+  { key: "notice_confirmed", label: "Manager confirmed notice (legal review if needed)" },
+  { key: "inspection_scheduled", label: "Inspection scheduled" },
+  { key: "condition_recorded", label: "Room condition recorded" },
+  { key: "keys_returned", label: "Keys returned" },
+  { key: "rent_reviewed", label: "Outstanding rent / adjustments flagged for staff" },
+  { key: "allocation_end_approved", label: "Allocation end approved by staff" },
+  { key: "bed_cleaning_hold", label: "Bed held for cleaning/maintenance if needed" },
+  { key: "availability_reopened", label: "Availability reopened only after manager confirmation" },
+];
+
+export const DEFAULT_CONTRACT_TEMPLATE_BODY = `RENTAL AGREEMENT (DRAFT)
+
+Contract reference: {{contract_reference}}
+
+This agreement is between:
+Owner: {{owner_legal_name}}
+Tenant: {{tenant_full_name}}
+
+Property: {{property_address}}
+Room: {{room_label}}
+Bed / space: {{bed_label}}
+
+Start date: {{contract_start_date}}
+End date: {{contract_end_date}}
+
+Monthly rent: {{currency}} {{monthly_rent}}
+Security deposit: {{currency}} {{security_deposit}}
+
+This document is a system-generated DRAFT for internal review.
+It is not signed and is not a legally binding instrument until
+approved and executed through the required process.
+
+Generated for mediation workflow — do not present as a signed contract.`;
 
 // Tenancy Statuses
 export const TENANCY_STATUSES = [

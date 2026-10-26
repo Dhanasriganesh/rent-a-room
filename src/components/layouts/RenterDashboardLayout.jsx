@@ -48,7 +48,7 @@ export default function RenterDashboardLayout() {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-[100dvh] min-w-0 overflow-x-clip bg-gray-50">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -59,9 +59,10 @@ export default function RenterDashboardLayout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-lg transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-[min(18rem,86vw)] transform bg-white shadow-lg transition-transform duration-200 lg:static lg:w-64 lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
@@ -133,13 +134,18 @@ export default function RenterDashboardLayout() {
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Top header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-6">
+        <header
+          className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-3 sm:h-16 sm:px-4 lg:px-6"
+          style={{ paddingTop: "max(0px, env(safe-area-inset-top, 0px))" }}
+        >
           {/* Mobile menu button */}
           <button
+            type="button"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden"
+            className="touch-target flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 lg:hidden"
+            aria-label="Open menu"
           >
             <FiMenu className="h-6 w-6" />
           </button>
@@ -147,12 +153,13 @@ export default function RenterDashboardLayout() {
           <div className="hidden flex-1 lg:block" />
 
           {/* Right side */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <NotificationBell />
 
             {/* Profile dropdown */}
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 className="flex items-center gap-2 rounded-lg p-2 hover:bg-gray-100"
               >
@@ -211,8 +218,8 @@ export default function RenterDashboardLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <div className="mx-auto max-w-7xl">
+        <main className="flex-1 overflow-y-auto overflow-x-clip p-3 sm:p-4 lg:p-6 safe-bottom">
+          <div className="mx-auto max-w-7xl min-w-0">
             <Outlet />
           </div>
         </main>

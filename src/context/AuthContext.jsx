@@ -17,7 +17,12 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
-import { COLLECTIONS, createAuditLog } from "../lib/firestore";
+import {
+  COLLECTIONS,
+  createAuditLog,
+  tryBootstrapAdmin,
+  claimStaffInvitation,
+} from "../lib/firestore";
 import {
   ACCOUNT_STATUS,
   DEFAULT_NOTIFICATION_PREFS,
@@ -164,6 +169,13 @@ export function AuthProvider({ children }) {
 
       await setDoc(doc(db, COLLECTIONS.USERS, firebaseUser.uid), userDoc);
 
+      // One-time bootstrap: elevate matching email to admin when configured and unlocked
+      try {
+        await tryBootstrapAdmin(firebaseUser.uid, firebaseUser.email);
+      } catch (bootstrapErr) {
+        console.warn("Bootstrap admin skipped:", bootstrapErr?.message || bootstrapErr);
+      }
+
       if (role === USER_ROLES.OWNER) {
         const ownerProfileDoc = {
           userId: firebaseUser.uid,
@@ -234,9 +246,9 @@ export function AuthProvider({ children }) {
         // Audit write should not block registration
       }
 
-      const profile = await fetchUserProfile(firebaseUser.uid);
+      let profile = await fetchUserProfile(firebaseUser.uid);
       setUserProfile(profile);
-      await loadRoleProfiles(firebaseUser.uid, role);
+      await loadRoleProfiles(firebaseUser.uid, profile?.role || role);
 
       return { user: firebaseUser, profile };
     } catch (err) {
@@ -245,11 +257,34 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const acceptStaffInvite = async (token) => {
+    if (!auth.currentUser) {
+      throw new Error("Sign in before accepting a staff invitation");
+    }
+    const role = await claimStaffInvitation(
+      token,
+      auth.currentUser.uid,
+      auth.currentUser.email
+    );
+    await refreshProfile();
+    return role;
+  };
+
   const login = async (email, password) => {
     try {
       setError(null);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       let profile = await fetchUserProfile(userCredential.user.uid);
+
+      // Auth user exists but Firestore profile was never created (e.g. Console-only user)
+      if (!profile) {
+        await signOut(auth);
+        const missing = new Error(
+          "Your login works, but no Firestore user profile exists. In Firebase Console → Firestore, create users/{uid} with fields: email, displayName, role (e.g. admin), accountStatus: active."
+        );
+        missing.code = "app/missing-profile";
+        throw missing;
+      }
 
       if (profile?.accountStatus === ACCOUNT_STATUS.SUSPENDED) {
         await signOut(auth);
@@ -349,6 +384,17 @@ export function AuthProvider({ children }) {
     }
   };
 
+  /** Clear mustChangePassword after Auth password update succeeds */
+  const completePasswordChange = async () => {
+    if (!user) return;
+    await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+      mustChangePassword: false,
+      passwordChangedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await refreshProfile();
+  };
+
   const updateOwnerProfileData = async (updates) => {
     if (!user || userProfile?.role !== USER_ROLES.OWNER) return;
     await updateDoc(doc(db, COLLECTIONS.OWNER_PROFILES, user.uid), {
@@ -395,12 +441,18 @@ export function AuthProvider({ children }) {
     resetPassword,
     resendVerificationEmail,
     updateUserProfile,
+    completePasswordChange,
     updateOwnerProfileData,
     updateRenterProfileData,
     refreshProfile,
+    acceptStaffInvite,
     isOwner: userProfile?.role === USER_ROLES.OWNER,
     isRenter: userProfile?.role === USER_ROLES.RENTER,
     isAdmin: userProfile?.role === USER_ROLES.ADMIN,
+    isPropertyManager: userProfile?.role === USER_ROLES.PROPERTY_MANAGER,
+    isStaff:
+      userProfile?.role === USER_ROLES.ADMIN ||
+      userProfile?.role === USER_ROLES.PROPERTY_MANAGER,
     isEmailVerified: Boolean(user?.emailVerified || userProfile?.emailVerified),
   };
 

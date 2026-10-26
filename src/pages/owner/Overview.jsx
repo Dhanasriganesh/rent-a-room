@@ -50,7 +50,6 @@ export default function OwnerOverview() {
 
         if (cancelled) return;
 
-        const now = new Date();
         const upcoming = charges
           .filter((c) => ["upcoming", "due", "overdue", "partial"].includes(c.status))
           .map((c) => ({ ...c, _due: toDate(c.dueDate) }))
