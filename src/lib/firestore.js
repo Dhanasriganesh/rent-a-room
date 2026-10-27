@@ -1168,27 +1168,87 @@ export async function uploadDocument(tenantUserId, data) {
   const docData = {
     ownerUserId: tenantUserId,
     relatedTenancyId: data.tenancyId || null,
+    relatedAllocationId: data.allocationId || null,
     documentRequestId: data.documentRequestId || null,
     documentType: data.documentType,
     fileName: data.fileName,
     fileSize: data.fileSize,
     mimeType: data.mimeType,
-    storageKey: data.storageKey, // Base64 or external URL
+    storageKey: data.storageKey, // base64 data URL
+    storagePath: data.storagePath || null,
     reviewStatus: "uploaded",
     reviewNote: "",
     expiresAt: data.expiresAt || null,
   };
-  
+
   const docId = await createDocument(COLLECTIONS.DOCUMENTS, docData);
-  
-  // Update document request if exists
+
   if (data.documentRequestId) {
     await updateDocument(COLLECTIONS.DOCUMENT_REQUESTS, data.documentRequestId, {
       status: "uploaded",
     });
   }
-  
+
   return docId;
+}
+
+/** Firestore docs max ~1MB — keep base64 payload comfortably under that */
+const DOC_BASE64_MAX_BYTES = 700 * 1024;
+const DOC_ALLOWED_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Save a tenant document as a base64 data URL in Firestore (no Firebase Storage).
+ */
+export async function uploadTenantDocumentFile(
+  tenantUserId,
+  { file, documentType, documentRequestId = null, tenancyId = null, allocationId = null }
+) {
+  if (!tenantUserId) throw new Error("Sign in required");
+  if (!file) throw new Error("Choose a file to upload");
+  if (!documentType) throw new Error("Document type required");
+
+  if (file.size > DOC_BASE64_MAX_BYTES) {
+    throw new Error(
+      "File must be 700KB or smaller (stored as base64 in the database). Compress the PDF/image and try again."
+    );
+  }
+
+  const mime = file.type || "application/octet-stream";
+  const okType =
+    DOC_ALLOWED_TYPES.has(mime) ||
+    /\.(pdf|jpe?g|png|webp)$/i.test(file.name || "");
+  if (!okType) {
+    throw new Error("Use PDF, JPG, or PNG only");
+  }
+
+  const storageKey = await fileToDataUrl(file);
+
+  return uploadDocument(tenantUserId, {
+    documentType,
+    documentRequestId,
+    tenancyId,
+    allocationId,
+    fileName: file.name,
+    fileSize: file.size,
+    mimeType: mime,
+    storageKey,
+    storagePath: null,
+  });
 }
 
 export async function reviewDocument(documentId, status, note = "") {

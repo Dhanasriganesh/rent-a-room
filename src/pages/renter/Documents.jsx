@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import {
   PageHeader,
@@ -7,7 +7,6 @@ import {
   Badge,
   Button,
   Modal,
-  Input,
   Select,
   Spinner,
   Alert,
@@ -16,14 +15,10 @@ import {
   FiFileText,
   FiUpload,
   FiDownload,
-  FiTrash2,
   FiEye,
-  FiCheckCircle,
-  FiClock,
   FiAlertCircle,
   FiFile,
   FiImage,
-  FiFilePlus,
 } from "react-icons/fi";
 import {
   queryDocuments,
@@ -32,6 +27,8 @@ import {
   getContractsVisibleToApplicant,
   createRenewalRequest,
   getRenewalRequestsForTenant,
+  uploadTenantDocumentFile,
+  getRenterHousingSummary,
 } from "../../lib/firestore";
 import {
   DOCUMENT_TYPES,
@@ -41,8 +38,10 @@ import {
   formatDate,
   formatRelativeDate,
 } from "../../lib/constants";
+
 export default function RenterDocuments() {
   const { user, userProfile } = useAuth();
+  const fileInputRef = useRef(null);
   const [documents, setDocuments] = useState([]);
   const [documentRequests, setDocumentRequests] = useState([]);
   const [contracts, setContracts] = useState([]);
@@ -53,10 +52,26 @@ export default function RenterDocuments() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [viewContract, setViewContract] = useState(null);
   const [renewMsg, setRenewMsg] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [allocationId, setAllocationId] = useState(null);
   const [uploadData, setUploadData] = useState({
     documentType: "id_proof",
-    fileName: "",
+    documentRequestId: null,
+    file: null,
   });
+
+  const resetUpload = () => {
+    setUploadData({ documentType: "id_proof", documentRequestId: null, file: null });
+    setUploadError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const pickFile = (file) => {
+    if (!file) return;
+    setUploadError("");
+    setUploadData((p) => ({ ...p, file }));
+  };
 
   useEffect(() => {
     fetchDocuments();
@@ -66,47 +81,61 @@ export default function RenterDocuments() {
     if (!user?.uid) return;
     setLoading(true);
     try {
-      // Get user's documents
-      const docsData = await queryDocuments(
-        COLLECTIONS.DOCUMENTS,
-        [{ field: "ownerUserId", operator: "==", value: user.uid }],
-        { field: "createdAt", direction: "desc" }
-      );
-      setDocuments(docsData);
+      const [docsData, byTenant, byEmail, renewalRows, requestsData, housing] =
+        await Promise.all([
+          queryDocuments(
+            COLLECTIONS.DOCUMENTS,
+            [{ field: "ownerUserId", operator: "==", value: user.uid }],
+            { field: "createdAt", direction: "desc" }
+          ),
+          getContractsForTenant(user.uid),
+          getContractsVisibleToApplicant(userProfile?.email || user.email),
+          getRenewalRequestsForTenant(user.uid),
+          queryDocuments(COLLECTIONS.DOCUMENT_REQUESTS, [
+            { field: "tenantUserId", operator: "==", value: user.uid },
+          ]),
+          getRenterHousingSummary(user.uid, userProfile?.email || user.email),
+        ]);
 
-      const [byTenant, byEmail, renewalRows] = await Promise.all([
-        getContractsForTenant(user.uid),
-        getContractsVisibleToApplicant(userProfile?.email || user.email),
-        getRenewalRequestsForTenant(user.uid),
-      ]);
+      setDocuments(docsData);
+      setDocumentRequests(requestsData || []);
+      setAllocationId(housing?.allocation?.id || null);
+
       const map = new Map();
       [...byTenant, ...byEmail]
         .filter((c) => ["approved", "issued", "signed", "superseded"].includes(c.status))
         .forEach((c) => map.set(c.id, c));
       setContracts([...map.values()]);
       setRenewals(renewalRows);
-
-      // Find active tenancy
-      const memberships = await queryDocuments(
-        COLLECTIONS.TENANCY_MEMBERS,
-        [
-          { field: "tenantUserId", operator: "==", value: user.uid },
-          { field: "status", operator: "==", value: "active" },
-        ]
-      );
-
-      if (memberships.length > 0) {
-        // Get document requests for this user
-        const requestsData = await queryDocuments(
-          COLLECTIONS.DOCUMENT_REQUESTS,
-          [{ field: "tenantUserId", operator: "==", value: user.uid }]
-        );
-        setDocumentRequests(requestsData);
-      }
     } catch (error) {
       console.error("Error fetching documents:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!user?.uid) return;
+    if (!uploadData.file) {
+      setUploadError("Choose a file first");
+      return;
+    }
+    setUploading(true);
+    setUploadError("");
+    try {
+      await uploadTenantDocumentFile(user.uid, {
+        file: uploadData.file,
+        documentType: uploadData.documentType,
+        documentRequestId: uploadData.documentRequestId || null,
+        allocationId,
+      });
+      setShowUploadModal(false);
+      resetUpload();
+      await fetchDocuments();
+    } catch (err) {
+      setUploadError(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -202,10 +231,11 @@ export default function RenterDocuments() {
                       size="sm"
                       className="gap-1"
                       onClick={() => {
+                        setUploadError("");
                         setUploadData({
                           documentType: request.documentType,
                           documentRequestId: request.id,
-                          fileName: "",
+                          file: null,
                         });
                         setShowUploadModal(true);
                       }}
@@ -337,58 +367,99 @@ export default function RenterDocuments() {
       <Modal
         isOpen={showUploadModal}
         onClose={() => {
+          if (uploading) return;
           setShowUploadModal(false);
-          setUploadData({ documentType: "id_proof", fileName: "" });
+          resetUpload();
         }}
         title="Upload Document"
         size="md"
       >
         <div className="space-y-4">
+          {uploadError && <Alert variant="error">{uploadError}</Alert>}
+
           <Select
             label="Document Type"
             options={DOCUMENT_TYPES}
             value={uploadData.documentType}
-            onChange={(e) => setUploadData({ ...uploadData, documentType: e.target.value })}
+            onChange={(e) =>
+              setUploadData((p) => ({ ...p, documentType: e.target.value }))
+            }
           />
 
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
               Upload File
             </label>
-            <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-8">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+              className="hidden"
+              onChange={(e) => pickFile(e.target.files?.[0] || null)}
+            />
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                pickFile(e.dataTransfer.files?.[0] || null);
+              }}
+              className="flex w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-white p-8 text-left transition hover:border-[#FF8C00]/60 hover:bg-[#F8F4EF]/40"
+            >
               <div className="text-center">
                 <FiUpload className="mx-auto h-10 w-10 text-gray-400" />
-                <p className="mt-2 text-sm font-medium text-gray-900">
-                  Drag and drop your file here
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  or click to browse
-                </p>
-                <p className="mt-2 text-xs text-gray-400">
-                  PDF, JPG, PNG up to 10MB
-                </p>
+                {uploadData.file ? (
+                  <>
+                    <p className="mt-2 text-sm font-medium text-gray-900">
+                      {uploadData.file.name}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {(uploadData.file.size / 1024).toFixed(1)} KB · click to change
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-2 text-sm font-medium text-gray-900">
+                      Drag and drop your file here
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">or click to browse</p>
+                    <p className="mt-2 text-xs text-gray-400">PDF, JPG, PNG up to 700KB</p>
+                  </>
+                )}
               </div>
-            </div>
+            </button>
           </div>
 
           <div className="rounded-lg bg-blue-50 p-4">
             <p className="text-sm text-blue-700">
-              <strong>Privacy Note:</strong> Your documents are encrypted and securely stored. 
-              Only you and your landlord can access them.
+              <strong>Privacy Note:</strong> Your documents are stored privately. Only you and
+              staff can access them.
             </p>
           </div>
 
           <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button
               variant="ghost"
+              disabled={uploading}
               onClick={() => {
                 setShowUploadModal(false);
-                setUploadData({ documentType: "id_proof", fileName: "" });
+                resetUpload();
               }}
             >
               Cancel
             </Button>
-            <Button className="gap-2">
+            <Button
+              className="gap-2"
+              loading={uploading}
+              disabled={!uploadData.file || uploading}
+              onClick={handleUpload}
+            >
               <FiUpload className="h-4 w-4" />
               Upload
             </Button>
@@ -458,12 +529,35 @@ export default function RenterDocuments() {
             )}
 
             <div className="flex gap-3 border-t border-gray-200 pt-4">
-              <Button variant="outline" className="flex-1 gap-2">
-                <FiDownload className="h-4 w-4" />
-                Download
-              </Button>
+              {selectedDoc.storageKey ? (
+                <a
+                  href={selectedDoc.storageKey}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                >
+                  <FiDownload className="h-4 w-4" />
+                  Open / Download
+                </a>
+              ) : (
+                <Button variant="outline" className="flex-1 gap-2" disabled>
+                  <FiDownload className="h-4 w-4" />
+                  No file
+                </Button>
+              )}
               {selectedDoc.reviewStatus === "rejected" && (
-                <Button className="flex-1 gap-2">
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    setShowPreviewModal(false);
+                    setUploadData({
+                      documentType: selectedDoc.documentType || "id_proof",
+                      documentRequestId: selectedDoc.documentRequestId || null,
+                      file: null,
+                    });
+                    setShowUploadModal(true);
+                  }}
+                >
                   <FiUpload className="h-4 w-4" />
                   Re-upload
                 </Button>
