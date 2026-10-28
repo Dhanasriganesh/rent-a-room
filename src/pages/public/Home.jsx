@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ButtonLink } from "../../components/ui";
+import { getPublicCatalog } from "../../lib/firestore";
+import { ButtonLink, Spinner } from "../../components/ui";
 import {
   FiHome,
   FiKey,
@@ -7,32 +9,69 @@ import {
   FiFileText,
   FiArrowRight,
   FiCheckCircle,
-  FiLink,
+  FiMapPin,
 } from "react-icons/fi";
 
 const steps = [
   {
-    title: "Open your link",
-    text: "Your manager sends a private browse link — rooms are not listed on the public site.",
+    title: "Browse properties",
+    text: "See rooms the desk is offering. No account is required to look.",
   },
   {
-    title: "Apply once",
-    text: "Send your details to the mediation desk — no chasing multiple landlords.",
+    title: "Send an enquiry",
+    text: "Leave your name and email on a property. The desk reviews it with you.",
   },
   {
-    title: "Move in calmly",
-    text: "Contract, keys, and rent tracked in one place after approval.",
+    title: "Sign in when invited",
+    text: "After you are accepted, the desk emails a login. You do not create the account yourself.",
   },
 ];
 
 const perks = [
   { icon: FiHome, title: "Verified rooms", text: "Inventory checked by the mediation desk." },
   { icon: FiKey, title: "Clear handovers", text: "Move-in and move-out steps you can follow." },
-  { icon: FiFileText, title: "Contracts & rent", text: "Drafts, charges, and payments in My Home." },
+  { icon: FiFileText, title: "Contracts & rent", text: "Drafts, charges, and payments in My Home after you are placed." },
   { icon: FiMessageSquare, title: "Human replies", text: "Chat with staff — no invented availability." },
 ];
 
+function rentLabel(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `€${Math.round(n)}`;
+}
+
 export default function Home() {
+  const [properties, setProperties] = useState([]);
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const catalog = await getPublicCatalog();
+        if (!cancelled) {
+          setProperties(catalog.properties || []);
+          setListings(catalog.listings || []);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setProperties([]);
+          setListings([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const previewProperties = properties.slice(0, 6);
+  const previewListings = listings.slice(0, 3);
+
   return (
     <div>
       <section className="relative overflow-hidden">
@@ -43,7 +82,7 @@ export default function Home() {
               "radial-gradient(ellipse 90% 70% at 70% 20%, rgba(255,140,0,0.14), transparent 50%), linear-gradient(180deg, #F3EBE3 0%, #EDE3D7 100%)",
           }}
         />
-        <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-10 sm:px-6 sm:pb-20 sm:pt-14 lg:px-8 lg:pb-28 lg:pt-20">
+        <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-10 sm:px-6 sm:pb-20 sm:pt-14 lg:px-8 lg:pb-24 lg:pt-20">
           <p className="font-serif text-4xl font-medium tracking-tight text-[#2C1810] sm:text-6xl lg:text-7xl">
             HomeRental
           </p>
@@ -51,16 +90,16 @@ export default function Home() {
             Rooms mediated with care — from first look to keys in hand.
           </h1>
           <p className="mt-3 max-w-lg text-sm leading-relaxed text-[#2C1810]/60 sm:mt-4 sm:text-base">
-            Available rooms are shared by your property manager via a private link.
-            They do not appear in a public browse list on this website.
+            Browse available properties below. Enquire without an account. The desk
+            sends your login only after you are accepted.
           </p>
 
           <div className="mt-8 flex w-full flex-col gap-3 sm:mt-10 sm:w-auto sm:flex-row sm:flex-wrap">
             <ButtonLink
-              to="/register"
+              to="/properties"
               className="w-full justify-center gap-2 !rounded-full !bg-[#2C1810] hover:!bg-[#3a2218] sm:w-auto"
             >
-              Create renter account
+              View properties
               <FiArrowRight className="h-4 w-4" />
             </ButtonLink>
             <ButtonLink
@@ -71,12 +110,100 @@ export default function Home() {
               Sign in
             </ButtonLink>
           </div>
+        </div>
+      </section>
 
-          <p className="mt-6 flex items-start gap-2 text-sm text-[#2C1810]/50">
-            <FiLink className="mt-0.5 h-4 w-4 shrink-0 text-[#FF8C00]" />
-            Received a link? Open it directly — it looks like{" "}
-            <span className="font-mono text-[#2C1810]/70">/browse/…</span>
-          </p>
+      <section id="properties" className="scroll-mt-20 border-t border-[#2C1810]/08 py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="font-serif text-3xl font-medium text-[#2C1810] sm:text-4xl">
+                Properties
+              </h2>
+              <p className="mt-3 max-w-xl text-[#2C1810]/55">
+                Rooms the mediation desk is offering now. Open one to send an enquiry.
+              </p>
+            </div>
+            {listings.length > 0 && (
+              <Link
+                to="/listings"
+                className="text-sm font-medium text-[#FF8C00] hover:underline"
+              >
+                Owner listings
+              </Link>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Spinner size="lg" />
+            </div>
+          ) : previewProperties.length === 0 && previewListings.length === 0 ? (
+            <div className="mt-10 rounded-[1.5rem] border border-white/55 bg-white/40 p-8 text-center">
+              <FiHome className="mx-auto h-8 w-8 text-[#2C1810]/40" />
+              <p className="mt-3 font-semibold text-[#2C1810]">No properties listed yet</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-[#2C1810]/55">
+                When the desk marks a property active, it appears here. You can still
+                message the team from the chat button.
+              </p>
+            </div>
+          ) : (
+            <>
+              {previewProperties.length > 0 && (
+                <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {previewProperties.map((property) => (
+                    <PropertyCard key={property.id} property={property} />
+                  ))}
+                </div>
+              )}
+              {properties.length > previewProperties.length && (
+                <p className="mt-6 text-sm text-[#2C1810]/50">
+                  Showing {previewProperties.length} of {properties.length} properties.
+                </p>
+              )}
+              {previewListings.length > 0 && (
+                <div className="mt-12">
+                  <h3 className="text-lg font-semibold text-[#2C1810]">Published listings</h3>
+                  <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {previewListings.map((listing) => (
+                      <Link
+                        key={listing.id}
+                        to={`/listings/${listing.id}`}
+                        className="overflow-hidden rounded-2xl border border-white/55 bg-white/50"
+                      >
+                        <div className="aspect-[16/10] bg-[#2C1810]/5">
+                          {listing.images?.[0] ? (
+                            <img
+                              src={listing.images[0]}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <FiHome className="h-8 w-8 text-[#2C1810]/30" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-4">
+                          <p className="font-semibold text-[#2C1810]">{listing.title}</p>
+                          <p className="mt-1 flex items-center gap-1 text-sm text-[#2C1810]/55">
+                            <FiMapPin className="h-4 w-4" />
+                            {listing.city || "Location on request"}
+                          </p>
+                          {rentLabel(listing.rentAmount) && (
+                            <p className="mt-2 text-sm font-semibold text-[#FF8C00]">
+                              {rentLabel(listing.rentAmount)}
+                              <span className="font-normal text-[#2C1810]/45"> / month</span>
+                            </p>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </section>
 
@@ -86,7 +213,7 @@ export default function Home() {
             How renting works here
           </h2>
           <p className="mt-3 max-w-xl text-[#2C1810]/55">
-            One mediation desk. Clear steps from shared link to move-in.
+            Look first. The desk creates your login when a room is yours.
           </p>
           <div className="mt-12 grid gap-6 sm:grid-cols-3">
             {steps.map((step, i) => (
@@ -141,13 +268,13 @@ export default function Home() {
                 Owners, rooms, applicants — one workspace
               </h2>
               <p className="mt-4 text-[#F3EBE3]/65">
-                Staff allocate beds, issue contracts, track rent, and share private
-                browse links without listing inventory on the public site.
+                Staff allocate beds, issue contracts, track rent, and send tenant logins.
+                Active properties show on this page automatically.
               </p>
               <ul className="mt-6 space-y-2.5">
                 {[
                   "Inventory of rooms & beds",
-                  "Private share links for applicants",
+                  "Public property catalogue",
                   "Rent reconciliation & messages",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2.5 text-sm text-[#F3EBE3]/80">
@@ -167,54 +294,72 @@ export default function Home() {
               </div>
             </div>
             <div className="rounded-[1.75rem] border border-white/15 bg-white/5 p-8 backdrop-blur-sm">
-              <p className="text-sm text-[#F3EBE3]/50">Looking for a room?</p>
-              <p className="mt-2 text-2xl font-semibold text-white">Use your manager’s link</p>
+              <p className="text-sm text-[#F3EBE3]/50">Already have a login?</p>
+              <p className="mt-2 text-2xl font-semibold text-white">Use the email from the desk</p>
               <p className="mt-3 text-sm leading-relaxed text-[#F3EBE3]/60">
-                Create a renter account so you can apply when you open the shared browse
-                URL. Track status anytime in My Home.
+                Tenants do not register themselves. Sign in with the temporary password,
+                then choose your own on the first visit.
               </p>
               <ButtonLink
-                to="/register"
+                to="/login"
                 variant="outline"
                 className="mt-6 gap-2 !rounded-full !border-[#F3EBE3]/30 !text-[#F3EBE3] hover:!bg-white/10"
               >
-                Create account
+                Sign in
                 <FiArrowRight className="h-4 w-4" />
               </ButtonLink>
             </div>
           </div>
         </div>
       </section>
-
-      <section className="py-16 sm:py-20">
-        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-          <h2 className="font-serif text-3xl font-medium text-[#2C1810] sm:text-4xl">
-            Ready when you are
-          </h2>
-          <p className="mx-auto mt-3 max-w-lg text-[#2C1810]/55">
-            Create an account now, then open the browse link your manager shared.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <ButtonLink to="/register" className="gap-2 !rounded-full !bg-[#2C1810]">
-              Create account
-            </ButtonLink>
-            <ButtonLink
-              to="/login"
-              variant="outline"
-              className="!rounded-full !border-[#2C1810]/20 !text-[#2C1810]"
-            >
-              Sign in
-            </ButtonLink>
-          </div>
-          <p className="mt-6 text-sm text-[#2C1810]/40">
-            Owner-branded sites remain at{" "}
-            <Link to="/listings" className="underline-offset-2 hover:underline">
-              /listings
-            </Link>{" "}
-            when published by owners.
-          </p>
-        </div>
-      </section>
     </div>
+  );
+}
+
+function PropertyCard({ property }) {
+  const available = Number(property.availableBeds) || 0;
+  const price = rentLabel(property.fromRent);
+  return (
+    <Link
+      to={`/properties/${property.id}`}
+      className="flex flex-col overflow-hidden rounded-2xl border border-white/55 bg-white/50 transition hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <div className="aspect-[16/10] bg-[#2C1810]/5">
+        {property.images?.[0] ? (
+          <img src={property.images[0]} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <FiHome className="h-8 w-8 text-[#2C1810]/30" />
+          </div>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold text-[#2C1810]">{property.name || "Property"}</h3>
+          <span className="shrink-0 rounded-full bg-[#2C1810]/5 px-2 py-0.5 text-xs text-[#2C1810]/70">
+            {available > 0 ? `${available} available` : "Ask the desk"}
+          </span>
+        </div>
+        <p className="mt-1 flex items-center gap-1 text-sm text-[#2C1810]/55">
+          <FiMapPin className="h-4 w-4 shrink-0" />
+          {[property.city, String(property.propertyType || "").replaceAll("_", " ")]
+            .filter(Boolean)
+            .join(" · ") || "Germany"}
+        </p>
+        {property.description && (
+          <p className="mt-2 line-clamp-2 text-sm text-[#2C1810]/60">{property.description}</p>
+        )}
+        <p className="mt-auto pt-3 text-sm font-semibold text-[#FF8C00]">
+          {price ? (
+            <>
+              From {price}
+              <span className="font-normal text-[#2C1810]/45"> / month</span>
+            </>
+          ) : (
+            <span className="font-normal text-[#2C1810]/45">Rent confirmed with the desk</span>
+          )}
+        </p>
+      </div>
+    </Link>
   );
 }

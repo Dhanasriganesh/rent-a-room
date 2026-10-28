@@ -145,9 +145,15 @@ export function AuthProvider({ children }) {
     role,
     phone = "",
     city = "",
+    inviteToken = "",
   }) => {
     if (![USER_ROLES.OWNER, USER_ROLES.RENTER].includes(role)) {
       throw new Error("Invalid account role");
+    }
+    if (role === USER_ROLES.RENTER && !inviteToken) {
+      throw new Error(
+        "Renter accounts are created by the desk. Sign in with the email and password you were sent."
+      );
     }
 
     try {
@@ -172,6 +178,9 @@ export function AuthProvider({ children }) {
         notificationPreferences: DEFAULT_NOTIFICATION_PREFS,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        ...(role === USER_ROLES.RENTER && inviteToken
+          ? { claimInviteToken: inviteToken }
+          : {}),
       };
 
       await setDoc(doc(db, COLLECTIONS.USERS, firebaseUser.uid), userDoc);

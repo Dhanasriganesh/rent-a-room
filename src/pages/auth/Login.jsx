@@ -84,13 +84,13 @@ export default function Login() {
               Manage it simply.
             </h1>
             <p className="mt-3 hidden text-base leading-relaxed text-[#2C1810]/65 sm:block">
-              Sign in to apply for rooms, follow your application, or run your
-              mediation desk — one calm place for rentals.
+              Tenants sign in with the email and password the desk sent.
+              Staff use the same page for the mediation desk.
             </p>
 
             <ul className="mt-6 hidden space-y-3 sm:block">
               {[
-                { icon: FiMapPin, text: "Open your manager’s room link" },
+                { icon: FiMapPin, text: "Browse properties before you enquire" },
                 { icon: FiKey, text: "Track keys, contracts & rent" },
                 { icon: FiHome, text: "Message the desk when you need help" },
               ].map((item) => {
@@ -207,12 +207,10 @@ export default function Login() {
 
               <p className="relative mt-5 text-center text-sm text-[#2C1810]/55">
                 Looking for a room?{" "}
-                <Link
-                  to="/register"
-                  className="font-semibold text-[#FF8C00] hover:underline"
-                >
-                  Create a renter account
+                <Link to="/properties" className="font-semibold text-[#FF8C00] hover:underline">
+                  Browse properties
                 </Link>
+                . Renters sign in only with the login the desk sends.
               </p>
               <p className="relative mt-3 text-center text-[11px] leading-relaxed text-[#2C1810]/40">
                 Property managers use this page.

@@ -84,10 +84,10 @@ export default function JoinInvite() {
             <FiKey className="h-5 w-5" />
           </span>
         </div>
-        <h1 className="text-center text-xl font-bold text-[#2C1810]">Join your rental</h1>
+        <h1 className="text-center text-xl font-bold text-[#2C1810]">Your login comes from the desk</h1>
         <p className="mt-2 text-center text-sm text-[#2C1810]/55">
-          Your property manager invited you to My Home. You create your own password —
-          nobody else sets it for you.
+          Renters do not create a password here. Sign in with the email and temporary
+          password your manager sent, then change it on first login.
         </p>
 
         {error && (
@@ -125,19 +125,8 @@ export default function JoinInvite() {
 
             {!user ? (
               <div className="flex flex-col gap-2">
-                <ButtonLink
-                  to={`/register?email=${encodeURIComponent(invite.email)}&join=${encodeURIComponent(token)}`}
-                  className="w-full !bg-[#2C1810]"
-                >
-                  Create password &amp; account
-                </ButtonLink>
-                <ButtonLink
-                  to="/login"
-                  variant="outline"
-                  className="w-full"
-                  state={{ from: `/join/${token}` }}
-                >
-                  I already have an account — sign in
+                <ButtonLink to="/login" className="w-full !bg-[#2C1810]">
+                  Sign in with desk credentials
                 </ButtonLink>
               </div>
             ) : (

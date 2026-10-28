@@ -41,8 +41,21 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == ownerId;
     }
 
-    function publicRegisterRole(role) {
-      return role in ['owner', 'renter'];
+    function publicOwnerRegister(userId) {
+      return isSelf(userId)
+        && request.resource.data.role == 'owner';
+    }
+
+    // Staff-invite signup: account is created as renter, then claimed.
+    function staffInviteSignup(userId) {
+      return isSelf(userId)
+        && request.resource.data.role == 'renter'
+        && request.resource.data.claimInviteToken is string
+        && request.resource.data.claimInviteToken.size() > 10
+        && exists(/databases/$(database)/documents/staff_invitations/$(request.resource.data.claimInviteToken))
+        && get(/databases/$(database)/documents/staff_invitations/$(request.resource.data.claimInviteToken)).data.status == 'pending'
+        && get(/databases/$(database)/documents/staff_invitations/$(request.resource.data.claimInviteToken)).data.email.lower()
+          == request.resource.data.email.lower();
     }
 
     function bootstrapConfigured() {
@@ -97,9 +110,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSelf(userId) || isStaff();
 
-      // Public registration: never create privileged roles directly.
-      // Staff may provision renter accounts (temp password + mustChangePassword).
-      allow create: if (isSelf(userId) && publicRegisterRole(request.resource.data.role))
+      // Renters cannot self-register. Staff provision their login.
+      // A renter profile may be created only while claiming a pending staff invite
+      // (the invitee starts as renter, then the claim upgrades the role).
+      allow create: if publicOwnerRegister(userId)
+        || staffInviteSignup(userId)
         || (
           isStaff()
           && request.resource.data.role == 'renter'
@@ -174,8 +189,9 @@ service cloud.firestore {
     }
 
     match /properties/{id} {
-      // Renters need property name/address on My Tenancy after allocation
-      allow read: if isSignedIn();
+      // Active properties are the public catalogue. Drafts stay private.
+      // Signed-in users (tenants, owners, staff) can still read their records.
+      allow read: if resource.data.status == 'active' || isSignedIn();
       allow create: if (isOwner() && request.resource.data.ownerId == request.auth.uid)
         || isStaff();
       allow update, delete: if isStaff()
@@ -208,7 +224,23 @@ service cloud.firestore {
           || resource.data.ownerId == request.auth.uid
         ));
       allow create: if isStaff()
-        || (isRenter() && request.resource.data.renterId == request.auth.uid);
+        || (isRenter() && request.resource.data.renterId == request.auth.uid)
+        || (
+          request.resource.data.source == 'public'
+          && request.resource.data.status == 'new'
+          && request.resource.data.renterId == null
+          && request.resource.data.applicantName is string
+          && request.resource.data.applicantName.size() > 1
+          && request.resource.data.applicantName.size() < 120
+          && request.resource.data.applicantEmail is string
+          && request.resource.data.applicantEmail.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+          && request.resource.data.message is string
+          && request.resource.data.message.size() < 4000
+          && (
+            request.resource.data.propertyId is string
+            || request.resource.data.listingId is string
+          )
+        );
       allow update: if isStaff()
         || (isSignedIn() && (
           resource.data.ownerId == request.auth.uid

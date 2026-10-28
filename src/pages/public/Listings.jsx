@@ -254,7 +254,7 @@ export default function Listings() {
           description={
             ownerParam
               ? "This owner has no published listings yet."
-              : "Mediation rooms are shared via private manager links (/browse/…), not this public list. Owner-published listings appear here when available."
+              : "No published listings yet. Active properties from the desk are on the home page."
           }
           action={
             hasActiveFilters && (

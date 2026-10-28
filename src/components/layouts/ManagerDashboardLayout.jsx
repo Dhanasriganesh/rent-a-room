@@ -41,7 +41,8 @@ const opsLinks = [
   { to: "/manager/share-links", label: "Share links", icon: FiLink },
   { to: "/manager/applicants", label: "Applicants", icon: FiInbox },
   { to: "/manager/allocations", label: "Allocation", icon: FiClipboard },
-  { to: "/manager/contracts", label: "Contracts", icon: FiFileText },
+  { to: "/manager/contracts", label: "Rental Documents", icon: FiFileText },
+  { to: "/manager/contract-ends", label: "Contract ends", icon: FiCalendar },
   { to: "/manager/rent", label: "Rent", icon: FiDollarSign },
   { to: "/manager/messages", label: "Messages", icon: FiMessageSquare },
   { to: "/manager/whatsapp", label: "WhatsApp", icon: FiRadio },
@@ -53,6 +54,7 @@ const opsLinks = [
 /** Superadmin (role: admin) — platform analytics & control only */
 const superadminLinks = [
   { to: "/manager", label: "Analytics", icon: FiBarChart2, end: true },
+  { to: "/manager/contract-ends", label: "Contract ends", icon: FiCalendar },
   { to: "/manager/reports", label: "Full report", icon: FiGrid },
   { to: "/manager/users", label: "Users", icon: FiUsers },
   { to: "/manager/audit", label: "Audit log", icon: FiActivity },

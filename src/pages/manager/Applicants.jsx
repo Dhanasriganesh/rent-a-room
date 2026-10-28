@@ -269,7 +269,7 @@ export default function ManagerApplicants() {
           <EmptyState
             icon={FiInbox}
             title="No applications"
-            description="Record a walk-in enquiry or wait for renters to apply from a listing."
+            description="Record a walk-in enquiry, or wait for a website enquiry from the public property page."
             action={<Button onClick={openCreate}>Record application</Button>}
           />
         </Card>
@@ -284,6 +284,7 @@ export default function ManagerApplicants() {
                       {app.applicantName || "Unnamed applicant"}
                     </h3>
                     <Badge variant="info">{statusLabel(app.status)}</Badge>
+                    {app.source === "public" && <Badge variant="warning">Website</Badge>}
                   </div>
                   <p className="mt-1 text-sm text-gray-500">
                     {app.applicantEmail || "No email"}

@@ -404,19 +404,13 @@ export default function ListingDetail() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => {
-                    if (!user) {
-                      window.location.href = `/login?redirect=/listings/${listing.id}`;
-                      return;
-                    }
-                    setApplyOpen(true);
-                  }}
+                  onClick={() => setApplyOpen(true)}
                 >
-                  Apply for This Home
+                  {user && isRenter ? "Apply for This Home" : "Enquire about this home"}
                 </Button>
-                {!user && (
+                {!(user && isRenter) && (
                   <Alert variant="info">
-                    Sign in for in-app chat and to track your application.
+                    No account needed. The desk sends a login after you are accepted.
                   </Alert>
                 )}
               </div>

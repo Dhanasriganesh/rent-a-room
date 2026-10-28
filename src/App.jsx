@@ -21,6 +21,8 @@ const JoinInvite = lazy(() => import("./pages/auth/JoinInvite"));
 const ChangePassword = lazy(() => import("./pages/auth/ChangePassword"));
 
 const Home = lazy(() => import("./pages/public/Home"));
+const Properties = lazy(() => import("./pages/public/Properties"));
+const PublicProperty = lazy(() => import("./pages/public/PublicProperty"));
 const Listings = lazy(() => import("./pages/public/Listings"));
 const ListingDetail = lazy(() => import("./pages/public/ListingDetail"));
 const BrowseLink = lazy(() => import("./pages/public/BrowseLink"));
@@ -59,6 +61,7 @@ const ManagerShareLinks = lazy(() => import("./pages/manager/ShareLinks"));
 const ManagerApplicants = lazy(() => import("./pages/manager/Applicants"));
 const ManagerAllocations = lazy(() => import("./pages/manager/Allocations"));
 const ManagerContracts = lazy(() => import("./pages/manager/Contracts"));
+const ContractEnds = lazy(() => import("./pages/manager/ContractEnds"));
 const ManagerRent = lazy(() => import("./pages/manager/Rent"));
 const ManagerInbox = lazy(() => import("./pages/manager/Inbox"));
 const ManagerWhatsApp = lazy(() => import("./pages/manager/WhatsApp"));
@@ -87,6 +90,8 @@ export default function App() {
             {/* Public */}
             <Route element={<PublicLayout />}>
               <Route index element={<Home />} />
+              <Route path="properties" element={<Properties />} />
+              <Route path="properties/:id" element={<PublicProperty />} />
               <Route path="listings" element={<Listings />} />
               <Route path="listings/:id" element={<ListingDetail />} />
               <Route path="browse/:slug" element={<BrowseLink />} />
@@ -241,6 +246,14 @@ export default function App() {
                 element={
                   <ProtectedRoute allowedRoles={["property_manager"]}>
                     <ManagerContracts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="contract-ends"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "property_manager"]}>
+                    <ContractEnds />
                   </ProtectedRoute>
                 }
               />

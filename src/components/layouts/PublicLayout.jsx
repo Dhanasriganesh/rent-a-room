@@ -5,13 +5,14 @@ import {
   FiX,
   FiHome,
   FiLogIn,
-  FiUserPlus,
+  FiGrid,
 } from "react-icons/fi";
 
 const WebsiteMessenger = lazy(() => import("../messages/WebsiteMessenger"));
 
 const publicLinks = [
-  { to: "/", label: "Home", icon: FiHome },
+  { to: "/", label: "Home", icon: FiHome, end: true },
+  { to: "/properties", label: "Properties", icon: FiGrid },
 ];
 
 /**
@@ -49,6 +50,7 @@ export default function PublicLayout() {
               <NavLink
                 key={link.to}
                 to={link.to}
+                end={link.end}
                 className={({ isActive }) =>
                   `rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                     isActive
@@ -65,15 +67,9 @@ export default function PublicLayout() {
           <div className="hidden items-center gap-2 md:flex">
             <Link
               to="/login"
-              className="rounded-full px-4 py-2 text-sm font-medium text-[#2C1810]/70 hover:bg-white/50"
-            >
-              Sign in
-            </Link>
-            <Link
-              to="/register"
               className="rounded-full bg-[#2C1810] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a2218]"
             >
-              Get started
+              Sign in
             </Link>
           </div>
 
@@ -94,6 +90,7 @@ export default function PublicLayout() {
                 <NavLink
                   key={link.to}
                   to={link.to}
+                  end={link.end}
                   onClick={closeMobileMenu}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium ${
@@ -111,18 +108,10 @@ export default function PublicLayout() {
               <Link
                 to="/login"
                 onClick={closeMobileMenu}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-[#2C1810]/70"
+                className="flex items-center gap-3 rounded-xl bg-[#2C1810] px-4 py-3 text-sm font-medium text-white"
               >
                 <FiLogIn className="h-5 w-5" />
                 Sign in
-              </Link>
-              <Link
-                to="/register"
-                onClick={closeMobileMenu}
-                className="flex items-center gap-3 rounded-xl bg-[#2C1810] px-4 py-3 text-sm font-medium text-white"
-              >
-                <FiUserPlus className="h-5 w-5" />
-                Get started
               </Link>
             </div>
           </div>
@@ -144,8 +133,8 @@ export default function PublicLayout() {
                 <span className="text-lg font-semibold">HomeRental</span>
               </Link>
               <p className="mt-4 text-sm leading-relaxed text-[#F3EBE3]/65">
-                Room mediation in Germany — open a private link from your manager,
-                apply once, and stay in touch through move-in and rent.
+                Room mediation in Germany — browse properties, enquire with the desk,
+                and sign in when they send your login.
               </p>
             </div>
             <div>
@@ -154,8 +143,8 @@ export default function PublicLayout() {
               </h4>
               <ul className="mt-4 space-y-2.5 text-sm text-[#F3EBE3]/70">
                 <li>
-                  <Link to="/register" className="hover:text-white">
-                    Create account
+                  <Link to="/properties" className="hover:text-white">
+                    Browse properties
                   </Link>
                 </li>
                 <li>

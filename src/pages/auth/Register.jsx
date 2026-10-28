@@ -16,8 +16,8 @@ import {
 } from "react-icons/fi";
 
 /**
- * Public registration is for people looking for a home (renter/applicant).
- * Staff join via invite link. Property owners are onboarded by the company.
+ * Public renter signup is closed. This page only creates a login for a staff
+ * invitation (`?invite=`). Renters receive credentials from the desk.
  */
 export default function Register() {
   const { register } = useAuth();
@@ -82,6 +82,7 @@ export default function Register() {
         phone: formData.phone,
         city: formData.city,
         role: USER_ROLES.RENTER,
+        inviteToken: returnInvite,
       });
 
       if (returnInvite) {
@@ -112,6 +113,47 @@ export default function Register() {
     }
   };
 
+  if (!returnInvite) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F3EBE3] px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="mb-8 text-center">
+            <Link to="/" className="inline-flex items-center gap-2.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#2C1810] text-white">
+                <FiHome className="h-5 w-5" />
+              </div>
+              <span className="text-xl font-semibold tracking-tight text-[#2C1810]">
+                HomeRental
+              </span>
+            </Link>
+          </div>
+          <Card className="!border-white/55 !bg-white/40">
+            <h1 className="text-2xl font-bold text-[#2C1810]">Accounts come from the desk</h1>
+            <p className="mt-3 text-sm leading-relaxed text-[#2C1810]/60">
+              Renters do not create their own login. Browse properties, send an enquiry,
+              and sign in with the email and temporary password the desk sends after you
+              are accepted.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <Link
+                to="/properties"
+                className="rounded-2xl bg-[#2C1810] px-4 py-3 text-center text-sm font-medium text-white"
+              >
+                Browse properties
+              </Link>
+              <Link
+                to="/login"
+                className="rounded-2xl border border-[#2C1810]/15 px-4 py-3 text-center text-sm font-medium text-[#2C1810]"
+              >
+                Sign in
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#F3EBE3] px-4 py-12">
       <div className="w-full max-w-md">
@@ -128,11 +170,9 @@ export default function Register() {
 
         <Card className="login-glass-card animate-slide-up !border-white/55 !bg-transparent shadow-[0_18px_40px_rgba(44,24,16,0.08)]">
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-[#2C1810]">Create your account</h1>
+            <h1 className="text-2xl font-bold text-[#2C1810]">Staff invitation</h1>
             <p className="mt-2 text-sm text-[#2C1810]/55">
-              {returnInvite
-                ? "Create your login, then accept your staff invitation."
-                : "Find a room and manage your application in one place."}
+              Create your login with the invited email, then accept the staff invitation.
             </p>
           </div>
 

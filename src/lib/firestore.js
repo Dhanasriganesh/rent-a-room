@@ -381,6 +381,152 @@ export async function getPublishedListings(filters = {}) {
   );
 }
 
+/**
+ * Public landing catalogue: active mediation properties plus published listings.
+ * Rent "from" is the lowest active offer on that property, when one exists.
+ */
+export async function getPublicCatalog() {
+  const [properties, listings, offers] = await Promise.all([
+    queryDocuments(
+      COLLECTIONS.PROPERTIES,
+      [{ field: "status", operator: "==", value: "active" }],
+      null,
+      60
+    ).catch((err) => {
+      console.warn("Public properties unavailable:", err?.message || err);
+      return [];
+    }),
+    getPublishedListings({ limit: 24 }).catch((err) => {
+      console.warn("Public listings unavailable:", err?.message || err);
+      return [];
+    }),
+    queryDocuments(
+      COLLECTIONS.RENTAL_OFFERS,
+      [{ field: "status", operator: "==", value: "active" }],
+      null,
+      200
+    ).catch(() => []),
+  ]);
+
+  const rentByProperty = {};
+  for (const offer of offers) {
+    const amount = Number(offer.monthlyRent);
+    if (!offer.propertyId || !Number.isFinite(amount) || amount <= 0) continue;
+    const current = rentByProperty[offer.propertyId];
+    if (current == null || amount < current) rentByProperty[offer.propertyId] = amount;
+  }
+
+  const ranked = [...properties].sort((a, b) => {
+    const aAvail = Number(a.availableBeds) || 0;
+    const bAvail = Number(b.availableBeds) || 0;
+    if (aAvail > 0 && bAvail === 0) return -1;
+    if (bAvail > 0 && aAvail === 0) return 1;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  return {
+    properties: ranked.map((property) => ({
+      ...property,
+      fromRent: rentByProperty[property.id] ?? null,
+    })),
+    listings,
+  };
+}
+
+/**
+ * Guest enquiry from the public site. No account is created.
+ * Staff see it under Applicants and issue a login later.
+ */
+export async function createPublicEnquiry({
+  listingId = null,
+  propertyId = null,
+  applicantName,
+  applicantEmail,
+  applicantPhone = "",
+  desiredMoveIn = "",
+  message = "",
+}) {
+  const hardening = await getHardeningSettings().catch(() => null);
+  if (hardening?.maintenanceMode) {
+    throw new Error("The site is temporarily unavailable. Please try again later.");
+  }
+  if (hardening && hardening.publicApplyEnabled === false) {
+    throw new Error("Enquiries are temporarily closed.");
+  }
+
+  const name = String(applicantName || "").trim();
+  const email = String(applicantEmail || "").trim().toLowerCase();
+  const note = String(message || "").trim();
+  if (name.length < 2) throw new Error("Please enter your name");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new Error("Please enter a valid email");
+  }
+  if (!listingId && !propertyId) throw new Error("Choose a property first");
+
+  let listingTitle = "Property enquiry";
+  let ownerId = null;
+  let ownerRecordId = null;
+  let resolvedPropertyId = propertyId || null;
+
+  if (listingId) {
+    const listing = await getDocument(COLLECTIONS.LISTINGS, listingId);
+    if (!listing || listing.status !== "published") {
+      throw new Error("This listing is not available");
+    }
+    listingTitle = listing.title || listingTitle;
+    ownerId = listing.ownerId || null;
+    resolvedPropertyId = listing.propertyId || resolvedPropertyId;
+  }
+
+  if (resolvedPropertyId) {
+    try {
+      const property = await getDocument(COLLECTIONS.PROPERTIES, resolvedPropertyId);
+      if (!listingId && (!property || property.status !== "active")) {
+        throw new Error("This property is not listed");
+      }
+      if (property) {
+        if (!listingId) listingTitle = property.name || listingTitle;
+        ownerId = ownerId || property.ownerId || null;
+        ownerRecordId = property.ownerRecordId || null;
+      }
+    } catch (err) {
+      if (!listingId) throw err;
+    }
+  }
+
+  return createDocument(COLLECTIONS.APPLICATIONS, {
+    renterId: null,
+    listingId: listingId || null,
+    ownerId,
+    ownerRecordId,
+    propertyId: resolvedPropertyId,
+    roomId: null,
+    bedId: null,
+    requestedRoomType: "",
+    listingTitle,
+    applicantName: name,
+    applicantEmail: email,
+    applicantPhone: String(applicantPhone || "").trim(),
+    desiredMoveIn: desiredMoveIn || null,
+    intendedDuration: "",
+    message: note,
+    occupation: "",
+    monthlyIncome: null,
+    numberOfOccupants: 1,
+    hasPets: false,
+    petDetails: "",
+    internalNotes: "",
+    assignedManagerId: null,
+    status: "new",
+    submittedAt: serverTimestamp(),
+    decidedAt: null,
+    decisionNote: "",
+    allocationId: null,
+    source: "public",
+    createdBy: null,
+  });
+}
+
 export async function publishListing(listingId) {
   await updateDocument(COLLECTIONS.LISTINGS, listingId, {
     status: "published",

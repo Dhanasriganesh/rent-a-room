@@ -364,6 +364,7 @@ export default function ManagerContracts() {
                     <p className="mt-1 text-sm text-gray-600">
                       {c.applicantName || "Tenant"} · €{Number(c.monthlyRent).toLocaleString()}/mo
                       {c.startDate ? ` · from ${c.startDate}` : ""}
+                      {c.endDate ? ` · ends ${c.endDate}` : " · no end date"}
                       {c.supersedesContractId ? " · renewal" : ""}
                     </p>
                   </div>
