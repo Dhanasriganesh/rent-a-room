@@ -23,6 +23,8 @@ import {
   Spinner,
   Modal,
   Input,
+  SearchBox,
+  matchesQuery,
   Select,
   Textarea,
   Alert,
@@ -47,6 +49,7 @@ export default function ManagerInventory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
 
   const [roomModal, setRoomModal] = useState(false);
   const [bedModal, setBedModal] = useState(null); // roomId
@@ -257,7 +260,7 @@ export default function ManagerInventory() {
         }
       />
 
-      <Card className="!p-4">
+      <Card className="!p-3 sm:!p-4">
         <Select
           label="Property"
           value={propertyId}
@@ -282,6 +285,8 @@ export default function ManagerInventory() {
           </p>
         )}
       </Card>
+
+      <SearchBox value={search} onChange={setSearch} placeholder="Search room or bed" />
 
       {message && <Alert variant="success">{message}</Alert>}
       {error && !roomModal && !bedModal && !offerModal && (
@@ -324,8 +329,29 @@ export default function ManagerInventory() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {inventory.rooms.map((room) => (
-            <Card key={room.id} className="!p-4">
+          {(inventory.rooms
+            .map((room) => {
+              const roomHit = matchesQuery(search, room.label, room.roomType, room.status, room.notes);
+              if (!String(search).trim() || roomHit) return room;
+              const beds = (room.beds || []).filter((bed) =>
+                matchesQuery(search, bed.label, bed.status, bed.notes)
+              );
+              return beds.length ? { ...room, beds } : null;
+            })
+            .filter(Boolean).length === 0) ? (
+            <p className="text-sm text-gray-500">No rooms or beds match that search.</p>
+          ) : inventory.rooms
+            .map((room) => {
+              const roomHit = matchesQuery(search, room.label, room.roomType, room.status, room.notes);
+              if (!String(search).trim() || roomHit) return room;
+              const beds = (room.beds || []).filter((bed) =>
+                matchesQuery(search, bed.label, bed.status, bed.notes)
+              );
+              return beds.length ? { ...room, beds } : null;
+            })
+            .filter(Boolean)
+            .map((room) => (
+            <Card key={room.id} className="!p-3 sm:!p-4">
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -389,7 +415,7 @@ export default function ManagerInventory() {
                             value={bed.status}
                             onChange={(e) => handleBedStatus(bed.id, e.target.value)}
                             options={BED_STATUSES}
-                            className="!w-40"
+                            className="w-full sm:!w-40"
                           />
                           <Button size="sm" variant="outline" onClick={() => openOffer(bed)}>
                             Pricing
@@ -404,7 +430,7 @@ export default function ManagerInventory() {
           ))}
 
           {inventory.units?.length > 0 && (
-            <Card className="!p-4">
+            <Card className="!p-3 sm:!p-4">
               <h4 className="mb-2 text-sm font-semibold text-gray-700">Legacy units</h4>
               <ul className="space-y-1 text-sm text-gray-600">
                 {inventory.units.map((u) => (

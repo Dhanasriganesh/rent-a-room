@@ -22,6 +22,8 @@ import {
   Alert,
   Badge,
   Tabs,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import { FiInbox, FiSend } from "react-icons/fi";
 
@@ -109,11 +111,7 @@ export default function ManagerInbox() {
     return threads.filter((t) => {
       if (channelFilter && channelOf(t) !== channelFilter) return false;
       if (statusFilter && (t.status || "open") !== statusFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        const hay = `${titleOf(t)} ${t.guestEmail || ""} ${t.lastMessage || ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
+      if (!matchesQuery(search, titleOf(t), t.guestEmail, t.guestName, t.lastMessage, t.propertyName)) return false;
       return true;
     });
   }, [threads, channelFilter, statusFilter, search]);
@@ -180,6 +178,8 @@ export default function ManagerInbox() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search name, email, or message" />
+
       <Alert variant="info">
         Email mode is <strong>sandbox</strong>: delivery logs are written, but no real external
         messages are sent until a provider is configured in a later release.
@@ -201,7 +201,7 @@ export default function ManagerInbox() {
               <EmptyState icon={FiInbox} title="No delivery logs" description="Outbound email attempts appear here." />
             </Card>
           ) : (
-            logs.map((log) => (
+            logs.filter((log) => matchesQuery(search, log.to, log.subject, log.status, log.channel, log.lastError)).map((log) => (
               <Card key={log.id} className="!p-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -229,13 +229,8 @@ export default function ManagerInbox() {
       )}
 
       {tab === "inbox" && (
-        <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
-          <Card className="!p-3 space-y-3">
-            <Input
-              placeholder="Search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+          <Card className={`!p-3 space-y-3 ${selected ? "hidden lg:block" : ""}`}>
             <Select
               value={channelFilter}
               onChange={(e) => setChannelFilter(e.target.value)}
@@ -272,7 +267,7 @@ export default function ManagerInbox() {
             </div>
           </Card>
 
-          <Card className="!p-0 flex min-h-[28rem] flex-col">
+          <Card className={`!p-0 flex min-h-[24rem] flex-col sm:min-h-[28rem] ${selected ? "" : "hidden lg:flex"}`}>
             {!selected ? (
               <div className="flex flex-1 items-center justify-center p-6">
                 <EmptyState
@@ -283,7 +278,14 @@ export default function ManagerInbox() {
               </div>
             ) : (
               <>
-                <div className="space-y-2 border-b border-gray-100 p-4">
+                <div className="space-y-2 border-b border-gray-100 p-3 sm:p-4">
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-primary lg:hidden"
+                    onClick={() => setSelectedId(null)}
+                  >
+                    ← All messages
+                  </button>
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-semibold text-gray-900">{titleOf(selected)}</h2>
                     <Badge>{channelOf(selected)}</Badge>
@@ -358,15 +360,16 @@ export default function ManagerInbox() {
                   <Button size="sm" variant="outline" onClick={saveNotes}>
                     Save notes
                   </Button>
-                  <form onSubmit={sendReply} className="flex gap-2">
-                    <Input
-                      className="flex-1"
-                      placeholder="Reply to contact…"
-                      value={reply}
-                      onChange={(e) => setReply(e.target.value)}
-                      required
-                    />
-                    <Button type="submit" loading={busy} className="gap-1">
+                  <form onSubmit={sendReply} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1">
+                      <Input
+                        placeholder="Reply to contact…"
+                        value={reply}
+                        onChange={(e) => setReply(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <Button type="submit" loading={busy} className="w-full gap-1 sm:w-auto">
                       <FiSend /> Send
                     </Button>
                   </form>

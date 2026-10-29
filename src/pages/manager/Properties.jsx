@@ -23,6 +23,8 @@ import {
   Alert,
   Badge,
   StatusBadge,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import { FiPlus, FiHome, FiMapPin, FiLayers } from "react-icons/fi";
 
@@ -40,6 +42,7 @@ export default function ManagerProperties() {
   const [migratingId, setMigratingId] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
     address: "",
@@ -172,6 +175,19 @@ export default function ManagerProperties() {
     }
   };
 
+  const visibleProperties = properties.filter((p) =>
+    matchesQuery(
+      search,
+      p.name,
+      p.address,
+      p.city,
+      p.postalCode,
+      p.status,
+      p.propertyType,
+      ownerName(p.ownerRecordId)
+    )
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -203,6 +219,8 @@ export default function ManagerProperties() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && !modalOpen && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search name, city, or address" />
+
       {properties.length === 0 ? (
         <Card>
           <EmptyState
@@ -214,8 +232,10 @@ export default function ManagerProperties() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {properties.map((p) => (
-            <Card key={p.id} className="!p-4">
+          {visibleProperties.length === 0 ? (
+            <p className="text-sm text-gray-500">No properties match that search.</p>
+          ) : visibleProperties.map((p) => (
+            <Card key={p.id} className="!p-3 sm:!p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -285,7 +305,7 @@ export default function ManagerProperties() {
             value={form.address}
             onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
           />
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Select
               label="City"
               value={form.city}

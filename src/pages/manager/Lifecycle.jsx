@@ -24,6 +24,8 @@ import {
   Textarea,
   Alert,
   Badge,
+  SearchBox,
+  matchesQuery,
   Checkbox,
 } from "../../components/ui";
 import { FiCalendar, FiPlus } from "react-icons/fi";
@@ -36,6 +38,7 @@ export default function ManagerLifecycle() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
   const [detail, setDetail] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -65,8 +68,13 @@ export default function ManagerLifecycle() {
   }, []);
 
   const filtered = useMemo(
-    () => events.filter((e) => !typeFilter || e.type === typeFilter),
-    [events, typeFilter]
+    () =>
+      events.filter(
+        (e) =>
+          (!typeFilter || e.type === typeFilter) &&
+          matchesQuery(search, e.applicantName, e.type, e.status, e.plannedDate, e.allocationId)
+      ),
+    [events, typeFilter, search]
   );
 
   const checklistDefs = (type) =>
@@ -167,8 +175,10 @@ export default function ManagerLifecycle() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && !modal && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search tenant, date, or type" />
+
       <Select
-        className="max-w-xs"
+        className="w-full sm:max-w-xs"
         value={typeFilter}
         onChange={(e) => setTypeFilter(e.target.value)}
         options={[
@@ -182,14 +192,14 @@ export default function ManagerLifecycle() {
         <Card>
           <EmptyState
             icon={FiCalendar}
-            title="No move events"
-            description="Start a move-in or move-out checklist from an allocation."
+            title={search ? "No matches" : "No move events"}
+            description={search ? "Nothing in this list matches that search." : "Start a move-in or move-out checklist from an allocation."}
           />
         </Card>
       ) : (
         <div className="space-y-3">
           {filtered.map((ev) => (
-            <Card key={ev.id} className="!p-4">
+            <Card key={ev.id} className="!p-3 sm:!p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap gap-2">
@@ -316,13 +326,13 @@ export default function ManagerLifecycle() {
                 </p>
               ))}
               {detail.status !== "completed" && (
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     value={legalFlag}
                     onChange={(e) => setLegalFlag(e.target.value)}
                     placeholder="e.g. deposit review needed"
                   />
-                  <Button type="button" variant="outline" onClick={addFlag}>
+                  <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={addFlag}>
                     Add
                   </Button>
                 </div>

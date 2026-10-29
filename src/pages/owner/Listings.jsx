@@ -199,7 +199,7 @@ export default function OwnerListings() {
               />
             </Card>
           ) : viewMode === "grid" ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
               {filteredListings.map((listing) => (
                 <ListingCard
                   key={listing.id}

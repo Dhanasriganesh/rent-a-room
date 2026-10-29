@@ -8,6 +8,8 @@ import {
   Input,
   Alert,
   StatsCard,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import {
   FiBarChart2,
@@ -24,6 +26,7 @@ export default function ManagerReports() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   const run = async () => {
     setLoading(true);
@@ -48,7 +51,7 @@ export default function ManagerReports() {
         subtitle="Occupancy, rent, lifecycle, maintenance, and delivery — staff desk only"
       />
 
-      <Card className="!p-4">
+      <Card className="!p-3 sm:!p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <Input
             label="From"
@@ -62,7 +65,7 @@ export default function ManagerReports() {
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
           />
-          <Button onClick={run} loading={loading} className="gap-2 sm:mb-0.5">
+          <Button onClick={run} loading={loading} className="w-full gap-2 sm:mb-0.5 sm:w-auto">
             <FiBarChart2 /> Generate
           </Button>
         </div>
@@ -73,6 +76,8 @@ export default function ManagerReports() {
       </Card>
 
       {error && <Alert variant="error">{error}</Alert>}
+
+      <SearchBox value={search} onChange={setSearch} placeholder="Search a property in this report" />
 
       {loading && (
         <div className="flex justify-center py-12">
@@ -87,7 +92,7 @@ export default function ManagerReports() {
             {report.timezone}
           </p>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
             <StatsCard
               label="Beds"
               value={report.inventory.beds}
@@ -128,30 +133,44 @@ export default function ManagerReports() {
                 </span>
               ))}
             </div>
-            {report.inventory.occupancyByProperty.length > 0 && (
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="text-xs uppercase text-gray-400">
-                    <tr>
-                      <th className="py-2 pr-4">Property</th>
-                      <th className="py-2 pr-4">Beds</th>
-                      <th className="py-2 pr-4">Occupied</th>
-                      <th className="py-2">Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.inventory.occupancyByProperty.map((p) => (
-                      <tr key={p.propertyId} className="border-t border-gray-100">
-                        <td className="py-2 pr-4">{p.name}</td>
-                        <td className="py-2 pr-4">{p.totalBeds}</td>
-                        <td className="py-2 pr-4">{p.occupied}</td>
-                        <td className="py-2">{p.occupancyRate}%</td>
+            {report.inventory.occupancyByProperty.filter((p) => matchesQuery(search, p.name, p.propertyId)).length > 0 ? (
+              <>
+                <ul className="mt-4 space-y-2 sm:hidden">
+                  {report.inventory.occupancyByProperty.filter((p) => matchesQuery(search, p.name, p.propertyId)).map((p) => (
+                    <li key={p.propertyId} className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                      <p className="font-medium text-gray-900">{p.name}</p>
+                      <p className="mt-1 text-gray-600">
+                        {p.occupied} occupied of {p.totalBeds} beds · {p.occupancyRate}%
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 hidden overflow-x-auto sm:block">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="text-xs uppercase text-gray-400">
+                      <tr>
+                        <th className="py-2 pr-4">Property</th>
+                        <th className="py-2 pr-4">Beds</th>
+                        <th className="py-2 pr-4">Occupied</th>
+                        <th className="py-2">Rate</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {report.inventory.occupancyByProperty.filter((p) => matchesQuery(search, p.name, p.propertyId)).map((p) => (
+                        <tr key={p.propertyId} className="border-t border-gray-100">
+                          <td className="py-2 pr-4">{p.name}</td>
+                          <td className="py-2 pr-4">{p.totalBeds}</td>
+                          <td className="py-2 pr-4">{p.occupied}</td>
+                          <td className="py-2">{p.occupancyRate}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : search ? (
+              <p className="mt-3 text-sm text-gray-500">No properties match that search.</p>
+            ) : null}
           </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">

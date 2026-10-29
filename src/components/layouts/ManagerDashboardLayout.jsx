@@ -298,7 +298,7 @@ export default function ManagerDashboardLayout() {
             </button>
           </div>
         </header>
-        <main className="flex-1 px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        <main className="min-w-0 max-w-full flex-1 overflow-x-clip px-3 pb-8 pt-3 sm:px-6 sm:pt-4 lg:px-8">
           <Outlet />
         </main>
       </div>

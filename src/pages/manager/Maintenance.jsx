@@ -24,6 +24,8 @@ import {
   Textarea,
   Alert,
   Badge,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import { FiTool, FiPlus } from "react-icons/fi";
 
@@ -39,6 +41,7 @@ export default function ManagerMaintenance() {
   const [detail, setDetail] = useState(null);
   const [saving, setSaving] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -70,12 +73,17 @@ export default function ManagerMaintenance() {
     load();
   }, []);
 
-  const filtered = useMemo(
-    () => tickets.filter((t) => !statusFilter || t.status === statusFilter),
-    [tickets, statusFilter]
-  );
-
   const propertyName = (id) => properties.find((p) => p.id === id)?.name || "—";
+
+  const filtered = useMemo(
+    () =>
+      tickets.filter(
+        (t) =>
+          (!statusFilter || t.status === statusFilter) &&
+          matchesQuery(search, t.title, t.category, t.status, t.applicantName, t.urgency, t.priority, propertyName(t.propertyId))
+      ),
+    [tickets, statusFilter, search, properties]
+  );
 
   const create = async (e) => {
     e.preventDefault();
@@ -143,8 +151,10 @@ export default function ManagerMaintenance() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && !modal && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search title, property, or tenant" />
+
       <Select
-        className="max-w-xs"
+        className="w-full sm:max-w-xs"
         value={statusFilter}
         onChange={(e) => setStatusFilter(e.target.value)}
         options={MAINTENANCE_STATUSES}
@@ -155,14 +165,14 @@ export default function ManagerMaintenance() {
         <Card>
           <EmptyState
             icon={FiTool}
-            title="No tickets"
-            description="Create a maintenance ticket for an allocated room."
+            title={search ? "No matches" : "No tickets"}
+            description={search ? "Nothing in this list matches that search." : "Create a maintenance ticket for an allocated room."}
           />
         </Card>
       ) : (
         <div className="space-y-3">
           {filtered.map((t) => (
-            <Card key={t.id} className="!p-4">
+            <Card key={t.id} className="!p-3 sm:!p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap gap-2">

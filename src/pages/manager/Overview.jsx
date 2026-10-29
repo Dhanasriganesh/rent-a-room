@@ -9,6 +9,8 @@ import {
   Alert,
   StatsCard,
   ButtonLink,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import {
   FiHome,
@@ -27,6 +29,7 @@ import {
 
 function SuperadminAnalytics() {
   const [report, setReport] = useState(null);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -70,9 +73,11 @@ function SuperadminAnalytics() {
 
       {error && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search a section" />
+
       {report && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
             <StatsCard label="Properties" value={report.inventory.properties} icon={FiHome} />
             <StatsCard label="Beds" value={report.inventory.beds} icon={FiKey} />
             <StatsCard
@@ -125,23 +130,23 @@ function SuperadminAnalytics() {
             </Card>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
             {[
               { to: "/manager/users", label: "Users", icon: FiUsers, note: "Accounts & roles" },
               { to: "/manager/audit", label: "Audit log", icon: FiActivity, note: "Who changed what" },
               { to: "/manager/settings", label: "Settings", icon: FiSettings, note: "Hardening & flags" },
-            ].map((item) => (
+            ].filter((item) => matchesQuery(search, item.label, item.note)).map((item) => (
               <Card key={item.to}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{item.label}</p>
-                    <p className="mt-1 text-xs text-gray-500">{item.note}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{item.label}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-gray-500 sm:text-xs">{item.note}</p>
                   </div>
-                  <item.icon className="h-5 w-5 text-[#2C1810]" />
+                  <item.icon className="h-4 w-4 shrink-0 text-[#2C1810] sm:h-5 sm:w-5" />
                 </div>
                 <Link
                   to={item.to}
-                  className="mt-4 inline-block text-sm font-medium text-[#FF8C00]"
+                  className="mt-2 inline-block text-xs font-medium text-[#FF8C00] sm:mt-4 sm:text-sm"
                 >
                   Open →
                 </Link>
@@ -156,6 +161,23 @@ function SuperadminAnalytics() {
 
 function ManagerOpsHome() {
   const { userProfile } = useAuth();
+  const [search, setSearch] = useState("");
+  const shortcuts = [
+    { to: "/manager/owners", label: "Owners", icon: FiUsers, note: "Owner records" },
+    { to: "/manager/properties", label: "Properties", icon: FiHome, note: "Portfolio" },
+    { to: "/manager/inventory", label: "Rooms & Beds", icon: FiKey, note: "Inventory" },
+    { to: "/manager/share-links", label: "Share links", icon: FiLink, note: "Private browse URLs" },
+    { to: "/manager/applicants", label: "Applicants", icon: FiInbox, note: "Pipeline" },
+    { to: "/manager/allocations", label: "Allocation", icon: FiKey, note: "Beds" },
+    { to: "/manager/contracts", label: "Rental Documents", icon: FiBarChart2, note: "Contracts" },
+    { to: "/manager/contract-ends", label: "Contract ends", icon: FiCalendar, note: "Who can leave" },
+    { to: "/manager/rent", label: "Rent", icon: FiBarChart2, note: "Charges" },
+    { to: "/manager/messages", label: "Messages", icon: FiInbox, note: "Inbox" },
+    { to: "/manager/whatsapp", label: "WhatsApp", icon: FiInbox, note: "Sandbox" },
+    { to: "/manager/maintenance", label: "Maintenance", icon: FiTool, note: "Tickets" },
+    { to: "/manager/lifecycle", label: "Move-in/out", icon: FiCalendar, note: "Checklists" },
+    { to: "/manager/reports", label: "Reports", icon: FiBarChart2, note: "Operations" },
+  ].filter((item) => matchesQuery(search, item.label, item.note));
 
   return (
     <div className="space-y-6">
@@ -164,26 +186,21 @@ function ManagerOpsHome() {
         subtitle="Day-to-day mediation — owners, inventory, applicants, and rent"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { to: "/manager/owners", label: "Owners", icon: FiUsers, note: "Owner records" },
-          { to: "/manager/properties", label: "Properties", icon: FiHome, note: "Portfolio" },
-          { to: "/manager/inventory", label: "Rooms & Beds", icon: FiKey, note: "Inventory" },
-          { to: "/manager/share-links", label: "Share links", icon: FiLink, note: "Private browse URLs" },
-          { to: "/manager/applicants", label: "Applicants", icon: FiInbox, note: "Pipeline" },
-          { to: "/manager/maintenance", label: "Maintenance", icon: FiTool, note: "Tickets" },
-          { to: "/manager/lifecycle", label: "Move-in/out", icon: FiCalendar, note: "Checklists" },
-          { to: "/manager/reports", label: "Reports", icon: FiBarChart2, note: "Operations" },
-        ].map((item) => (
+      <SearchBox value={search} onChange={setSearch} placeholder="Search a page" />
+
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
+        {shortcuts.length === 0 ? (
+          <p className="col-span-2 text-sm text-gray-500">No pages match that search.</p>
+        ) : shortcuts.map((item) => (
           <Card key={item.to}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-semibold text-gray-900">{item.label}</p>
-                <p className="mt-1 text-xs text-gray-500">{item.note}</p>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-tight text-gray-900">{item.label}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-gray-500 sm:text-xs">{item.note}</p>
               </div>
-              <item.icon className="h-5 w-5 text-primary" />
+              <item.icon className="h-4 w-4 shrink-0 text-primary sm:h-5 sm:w-5" />
             </div>
-            <Link to={item.to} className="mt-4 inline-block text-sm font-medium text-primary">
+            <Link to={item.to} className="mt-2 inline-block text-xs font-medium text-primary sm:mt-4 sm:text-sm">
               Open →
             </Link>
           </Card>

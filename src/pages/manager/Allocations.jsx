@@ -23,6 +23,8 @@ import {
   Select,
   Alert,
   Badge,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import { FiKey } from "react-icons/fi";
 
@@ -42,6 +44,7 @@ export default function ManagerAllocations() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(Boolean(applicationId));
   const [saving, setSaving] = useState(false);
   const [invitingId, setInvitingId] = useState("");
@@ -247,6 +250,19 @@ export default function ManagerAllocations() {
     }
   };
 
+  const visibleAllocations = allocations.filter((a) =>
+    matchesQuery(
+      search,
+      a.applicantName,
+      appName(a.applicationId),
+      propertyName(a.propertyId),
+      a.status,
+      a.bedId,
+      a.startDate,
+      a.agreedMonthlyRent
+    )
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -270,6 +286,8 @@ export default function ManagerAllocations() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && !modalOpen && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search tenant, property, or bed" />
+
       {!approvedApps.length && (
         <Alert variant="info">
           No approved applications waiting for a bed.{" "}
@@ -290,10 +308,12 @@ export default function ManagerAllocations() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {allocations.map((a) => (
+          {visibleAllocations.length === 0 ? (
+            <p className="text-sm text-gray-500">No allocations match that search.</p>
+          ) : visibleAllocations.map((a) => (
             <Card
               key={a.id}
-              className={`!p-4 ${highlight === a.id ? "ring-2 ring-primary" : ""}`}
+              className={`!p-3 sm:!p-4 ${highlight === a.id ? "ring-2 ring-primary" : ""}`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>

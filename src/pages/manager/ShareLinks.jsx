@@ -22,6 +22,8 @@ import {
   Alert,
   Badge,
   Select,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import { FiLink, FiCopy, FiPlus, FiRefreshCw, FiTrash2, FiExternalLink } from "react-icons/fi";
 
@@ -32,6 +34,7 @@ export default function ManagerShareLinks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busySlug, setBusySlug] = useState("");
@@ -236,6 +239,8 @@ export default function ManagerShareLinks() {
       {error && <Alert variant="error">{error}</Alert>}
       {message && <Alert variant="success">{message}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search title, description, or link" />
+
       {loading ? (
         <div className="flex justify-center py-16">
           <Spinner size="lg" />
@@ -254,7 +259,29 @@ export default function ManagerShareLinks() {
         />
       ) : (
         <div className="space-y-4">
-          {links.map((link) => {
+          {links.filter((link) =>
+            matchesQuery(
+              search,
+              link.title,
+              link.description,
+              link.id,
+              link.slug,
+              link.status,
+              ...(link.items || []).map((item) => item.roomLabel || item.label || item.bedLabel)
+            )
+          ).length === 0 ? (
+            <p className="text-sm text-gray-500">No share links match that search.</p>
+          ) : links.filter((link) =>
+            matchesQuery(
+              search,
+              link.title,
+              link.description,
+              link.id,
+              link.slug,
+              link.status,
+              ...(link.items || []).map((item) => item.roomLabel || item.label || item.bedLabel)
+            )
+          ).map((link) => {
             const slug = link.id || link.slug;
             const url = `${origin}/browse/${slug}`;
             const busy = busySlug === slug;
@@ -279,7 +306,7 @@ export default function ManagerShareLinks() {
                       {(link.propertyIds || []).length === 1 ? "y" : "ies"}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap [&_a]:w-full [&_button]:w-full sm:[&_a]:w-auto sm:[&_button]:w-auto">
                     <Button
                       variant="outline"
                       size="sm"

@@ -23,6 +23,8 @@ import {
   Alert,
   Badge,
   Tabs,
+  SearchBox,
+  matchesQuery,
   Checkbox,
 } from "../../components/ui";
 import { FiSend, FiRadio } from "react-icons/fi";
@@ -83,6 +85,7 @@ const SAMPLE_STATUS_WEBHOOK = {
 export default function ManagerWhatsApp() {
   const { user } = useAuth();
   const [tab, setTab] = useState("overview");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
   const [templates, setTemplates] = useState([]);
@@ -237,6 +240,8 @@ export default function ManagerWhatsApp() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search templates, logs, or checklist" />
+
       <Alert variant="warning">
         Access tokens must never sit in the Vite client. Live/test Meta calls go through Cloud
         Functions + Secret Manager. This UI uses the <strong>sandbox adapter</strong> only.
@@ -258,7 +263,7 @@ export default function ManagerWhatsApp() {
 
       {tab === "overview" && (
         <div className="space-y-4">
-          <Card className="!p-4 space-y-3">
+          <Card className="!p-3 sm:!p-4 space-y-3">
             <div className="flex flex-wrap gap-2">
               <Badge variant="info">mode: {settings.mode || "sandbox"}</Badge>
               <Badge variant={settings.productionApproved ? "danger" : "success"}>
@@ -289,13 +294,13 @@ export default function ManagerWhatsApp() {
               Save notes
             </Button>
           </Card>
-          <Card className="!p-4">
+          <Card className="!p-3 sm:!p-4">
             <h3 className="font-semibold text-gray-900">Recent WhatsApp delivery logs</h3>
             {waLogs.length === 0 ? (
               <p className="mt-2 text-sm text-gray-500">No WhatsApp sends logged yet.</p>
             ) : (
               <ul className="mt-2 space-y-1 text-sm text-gray-600">
-                {waLogs.slice(0, 8).map((l) => (
+                {waLogs.filter((l) => matchesQuery(search, l.to, l.subject, l.status, l.channel)).slice(0, 8).map((l) => (
                   <li key={l.id}>
                     {l.status} · {l.to} · {l.subject}
                   </li>
@@ -307,7 +312,7 @@ export default function ManagerWhatsApp() {
       )}
 
       {tab === "send" && (
-        <Card className="!p-4">
+        <Card className="!p-3 sm:!p-4">
           <form onSubmit={sendTest} className="space-y-4">
             <Input
               label="Recipient E.164 (digits, country code)"
@@ -348,7 +353,7 @@ export default function ManagerWhatsApp() {
 
       {tab === "templates" && (
         <div className="space-y-4">
-          <Card className="!p-4">
+          <Card className="!p-3 sm:!p-4">
             <form onSubmit={saveTemplate} className="space-y-3">
               <Input
                 label="Name"
@@ -371,7 +376,7 @@ export default function ManagerWhatsApp() {
           {templates.length === 0 ? (
             <EmptyState icon={FiRadio} title="No templates" description="Add utility templates locally, then submit in Meta." />
           ) : (
-            templates.map((t) => (
+            templates.filter((t) => matchesQuery(search, t.name, t.body, t.metaStatus, t.language)).map((t) => (
               <Card key={t.id} className="!p-3">
                 <div className="flex flex-wrap gap-2">
                   <span className="font-medium">{t.name}</span>
@@ -387,7 +392,7 @@ export default function ManagerWhatsApp() {
 
       {tab === "webhooks" && (
         <div className="space-y-4">
-          <Card className="!p-4 space-y-3">
+          <Card className="!p-3 sm:!p-4 space-y-3">
             <p className="text-sm text-gray-600">
               Simulate Meta webhook payloads (same shape the Cloud Function will forward). Creates
               inbox threads on channel <code>whatsapp</code>.
@@ -405,7 +410,7 @@ export default function ManagerWhatsApp() {
               </Button>
             </div>
           </Card>
-          {events.map((ev) => (
+          {events.filter((ev) => matchesQuery(search, ev.payloadType, ev.rawSummary?.field, ev.processed ? "processed" : "pending")).map((ev) => (
             <Card key={ev.id} className="!p-3 text-sm">
               <div className="flex flex-wrap gap-2">
                 <Badge variant={ev.simulated ? "warning" : "info"}>
@@ -423,13 +428,13 @@ export default function ManagerWhatsApp() {
       )}
 
       {tab === "checklist" && (
-        <Card className="!p-4 space-y-4">
+        <Card className="!p-3 sm:!p-4 space-y-4">
           <p className="text-sm text-gray-600">
             Complete every item before enabling production. Live mode still requires{" "}
             <code>productionApproved</code>.
           </p>
           <div className="space-y-2">
-            {WHATSAPP_PRODUCTION_CHECKLIST.map((item) => (
+            {WHATSAPP_PRODUCTION_CHECKLIST.filter((item) => matchesQuery(search, item.label, item.key)).map((item) => (
               <Checkbox
                 key={item.key}
                 label={item.label}
@@ -438,8 +443,9 @@ export default function ManagerWhatsApp() {
               />
             ))}
           </div>
-          <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+          <div className="flex flex-col gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:flex-wrap">
             <Button
+              className="w-full whitespace-normal text-left sm:w-auto"
               variant="outline"
               loading={busy}
               disabled={checklistDone < WHATSAPP_PRODUCTION_CHECKLIST.length}
@@ -454,6 +460,7 @@ export default function ManagerWhatsApp() {
               Record written approval (keep sandbox until Functions live)
             </Button>
             <Button
+              className="w-full sm:w-auto"
               variant="ghost"
               loading={busy}
               onClick={() => saveSettings({ productionApproved: false, mode: "sandbox" })}

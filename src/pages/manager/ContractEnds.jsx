@@ -9,6 +9,8 @@ import {
   Select,
   Alert,
   Badge,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import { FiCalendar } from "react-icons/fi";
 
@@ -69,6 +71,7 @@ export default function ContractEnds() {
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
   const [showClosed, setShowClosed] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -113,12 +116,20 @@ export default function ContractEnds() {
         if (end) leave = end.getTime() <= today.getTime() ? "can_leave" : "stays";
         return { contract, end, leave };
       })
-      .filter(({ end }) => {
-        if (!month && !year) return true;
-        if (!end) return false;
-        if (month && end.getMonth() + 1 !== Number(month)) return false;
-        if (year && end.getFullYear() !== Number(year)) return false;
-        return true;
+      .filter(({ contract, end }) => {
+        if (month || year) {
+          if (!end) return false;
+          if (month && end.getMonth() + 1 !== Number(month)) return false;
+          if (year && end.getFullYear() !== Number(year)) return false;
+        }
+        return matchesQuery(
+          search,
+          contract.applicantName,
+          contract.contractReference,
+          contract.status,
+          propertyName(contract.propertyId),
+          contract.endDate
+        );
       })
       .sort((a, b) => {
         if (!a.end && !b.end) return 0;
@@ -126,7 +137,7 @@ export default function ContractEnds() {
         if (!b.end) return -1;
         return a.end - b.end;
       });
-  }, [contracts, month, year, showClosed]);
+  }, [contracts, month, year, showClosed, search, properties]);
 
   const monthName = MONTHS.find((m) => m.value === month)?.label;
 
@@ -147,8 +158,10 @@ export default function ContractEnds() {
 
       {error && <Alert variant="error">{error}</Alert>}
 
-      <Card className="!p-4">
-        <div className="grid gap-4 sm:grid-cols-3">
+      <SearchBox value={search} onChange={setSearch} placeholder="Search tenant, property, or reference" />
+
+      <Card className="!p-3 sm:!p-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Select
             label="Ends in"
             value={month}
@@ -195,7 +208,7 @@ export default function ContractEnds() {
       ) : (
         <div className="space-y-3">
           {rows.map(({ contract, end, leave }) => (
-            <Card key={contract.id} className="!p-4">
+            <Card key={contract.id} className="!p-3 sm:!p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">

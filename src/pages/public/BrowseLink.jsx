@@ -154,10 +154,10 @@ export default function BrowseLink() {
           description="The manager may refresh or update this list soon."
         />
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3">
           {items.map((item) => (
             <Card key={`${item.bedId || item.roomId}`} className="flex flex-col overflow-hidden p-0">
-              <div className="flex h-40 items-center justify-center bg-[#2C1810]/05">
+              <div className="flex h-28 items-center justify-center bg-[#2C1810]/05 sm:h-40">
                 {item.photo ? (
                   <img
                     src={item.photo}
@@ -168,9 +168,9 @@ export default function BrowseLink() {
                   <FiHome className="h-10 w-10 text-[#2C1810]/25" />
                 )}
               </div>
-              <div className="flex flex-1 flex-col p-5">
+              <div className="flex flex-1 flex-col p-3 sm:p-5">
                 <div className="flex items-start justify-between gap-2">
-                  <h2 className="font-semibold text-[#2C1810]">
+                  <h2 className="text-sm font-semibold leading-tight text-[#2C1810] sm:text-base">
                     {item.roomLabel}
                     {item.bedLabel ? ` · ${item.bedLabel}` : ""}
                   </h2>

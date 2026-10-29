@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FiLoader, FiCheck, FiX, FiAlertCircle, FiInfo } from "react-icons/fi";
+import { FiLoader, FiCheck, FiX, FiAlertCircle, FiInfo, FiSearch } from "react-icons/fi";
 
 // Button variants
 const buttonVariants = {
@@ -16,6 +16,33 @@ const buttonSizes = {
   md: "px-4 py-2.5 text-sm",
   lg: "px-6 py-3 text-base",
 };
+
+export function matchesQuery(query, ...parts) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  return parts
+    .flat()
+    .filter((part) => part != null && part !== false)
+    .join(" ")
+    .toLowerCase()
+    .includes(q);
+}
+
+export function SearchBox({ value, onChange, placeholder = "Search", className = "" }) {
+  return (
+    <label className={`relative block ${className}`}>
+      <span className="sr-only">{placeholder}</span>
+      <FiSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+      />
+    </label>
+  );
+}
 
 export function Button({
   variant = "primary",
@@ -166,7 +193,7 @@ export function Checkbox({
 
 export function Card({ children, className = "", padding = true }) {
   return (
-    <div className={`rounded-2xl border border-[#eef0f4] bg-white shadow-[0_1px_2px_rgba(26,29,31,0.04)] ${padding ? "p-5 sm:p-6" : ""} ${className}`}>
+    <div className={`min-w-0 break-words rounded-xl border border-[#eef0f4] bg-white shadow-[0_1px_2px_rgba(26,29,31,0.04)] sm:rounded-2xl ${padding ? "p-3 sm:p-6" : ""} ${className}`}>
       {children}
     </div>
   );
@@ -340,7 +367,7 @@ export function LoadingOverlay({ message = "Loading..." }) {
 // Page header
 export function PageHeader({ title, subtitle, breadcrumbs, actions, className = "" }) {
   return (
-    <div className={`mb-5 sm:mb-6 ${className}`}>
+    <div className={`page-header mb-5 sm:mb-6 ${className}`}>
       {breadcrumbs && (
         <nav className="mb-2 overflow-x-auto text-sm text-gray-500 scroll-x">
           {breadcrumbs.map((crumb, index) => (
@@ -357,17 +384,17 @@ export function PageHeader({ title, subtitle, breadcrumbs, actions, className = 
           ))}
         </nav>
       )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="page-header__row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-[#1a1d1f] sm:text-2xl lg:text-[1.75rem]">
+          <h1 className="page-header__title text-xl font-bold tracking-tight text-[#1a1d1f] sm:text-2xl lg:text-[1.75rem]">
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-1 text-sm leading-relaxed text-[#9a9fa5]">{subtitle}</p>
+            <p className="page-header__subtitle mt-1 text-sm leading-relaxed text-[#9a9fa5]">{subtitle}</p>
           )}
         </div>
         {actions && (
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end sm:gap-3">
+          <div className="page-header__actions flex flex-wrap items-center gap-2 sm:justify-end">
             {actions}
           </div>
         )}
@@ -508,17 +535,17 @@ export function StatsCard({ label, value, change, icon: Icon, trend = "neutral" 
   
   return (
     <Card>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium leading-tight text-gray-500 sm:text-sm">{label}</p>
+          <p className="mt-1 break-words text-lg font-bold leading-tight text-gray-900 sm:mt-2 sm:text-3xl">{value}</p>
           {change && (
-            <p className={`mt-1 text-sm ${trendColors[trend]}`}>{change}</p>
+            <p className={`mt-1 text-xs sm:text-sm ${trendColors[trend]}`}>{change}</p>
           )}
         </div>
         {Icon && (
-          <div className="rounded-lg bg-primary/10 p-3">
-            <Icon className="h-6 w-6 text-primary" />
+          <div className="shrink-0 rounded-md bg-primary/10 p-1.5 sm:rounded-lg sm:p-3">
+            <Icon className="h-3.5 w-3.5 text-primary sm:h-6 sm:w-6" />
           </div>
         )}
       </div>

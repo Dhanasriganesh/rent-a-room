@@ -11,6 +11,8 @@ import {
   PageHeader,
   Card,
   Button,
+  SearchBox,
+  matchesQuery,
   EmptyState,
   Spinner,
   Modal,
@@ -30,6 +32,7 @@ export default function ManagerOwners() {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     fullName: "",
     legalName: "",
@@ -120,6 +123,10 @@ export default function ManagerOwners() {
     }
   };
 
+  const visibleOwners = owners.filter((owner) =>
+    matchesQuery(search, owner.fullName, owner.contactEmail, owner.phoneNumber, owner.status)
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -142,6 +149,8 @@ export default function ManagerOwners() {
 
       {error && !modalOpen && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search name, email, or phone" />
+
       {owners.length === 0 ? (
         <Card>
           <EmptyState
@@ -153,8 +162,10 @@ export default function ManagerOwners() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {owners.map((owner) => (
-            <Card key={owner.id} className="!p-4">
+          {visibleOwners.length === 0 ? (
+            <p className="text-sm text-gray-500">No owners match that search.</p>
+          ) : visibleOwners.map((owner) => (
+            <Card key={owner.id} className="!p-3 sm:!p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -163,7 +174,7 @@ export default function ManagerOwners() {
                       {owner.status}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 break-all text-sm text-gray-500">
                     {owner.contactEmail}
                     {owner.phoneNumber ? ` · ${owner.phoneNumber}` : ""}
                   </p>
@@ -173,7 +184,7 @@ export default function ManagerOwners() {
                     {owner.linkedUserId ? ` · linked user ${owner.linkedUserId.slice(0, 8)}…` : ""}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" className="gap-1" onClick={() => openEdit(owner)}>
                     <FiEdit2 /> Edit
                   </Button>

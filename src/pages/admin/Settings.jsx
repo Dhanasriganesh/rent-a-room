@@ -15,6 +15,8 @@ import {
   Checkbox,
   Textarea,
   Select,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 import { Link } from "react-router-dom";
 
@@ -25,6 +27,7 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -84,27 +87,29 @@ export default function AdminSettings() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
+      <SearchBox value={search} onChange={setSearch} placeholder="Search a setting or checklist item" />
+
       <Card className="space-y-4">
         <h2 className="text-lg font-semibold text-gray-900">Runtime flags</h2>
-        <Checkbox
+        {matchesQuery(search, "Maintenance mode") && <Checkbox
           label="Maintenance mode (blocks new applications and website chat)"
           checked={Boolean(settings.maintenanceMode)}
           disabled={saving}
           onChange={(e) => save({ maintenanceMode: e.target.checked })}
-        />
-        <Checkbox
+        />}
+        {matchesQuery(search, "Public applications enabled") && <Checkbox
           label="Public applications enabled"
           checked={settings.publicApplyEnabled !== false}
           disabled={saving}
           onChange={(e) => save({ publicApplyEnabled: e.target.checked })}
-        />
-        <Checkbox
+        />}
+        {matchesQuery(search, "Website chat enabled") && <Checkbox
           label="Website chat enabled"
           checked={settings.publicChatEnabled !== false}
           disabled={saving}
           onChange={(e) => save({ publicChatEnabled: e.target.checked })}
-        />
-        <Select
+        />}
+        {matchesQuery(search, "Email mode") && <Select
           label="Email mode"
           value={settings.emailMode || "sandbox"}
           disabled={saving}
@@ -114,24 +119,28 @@ export default function AdminSettings() {
             { value: "live", label: "Live Gmail SMTP (Cloud Function)" },
           ]}
           hint="Live: Vercel /api/send with GMAIL_* env; staff must be signed in. Local: npm run email:api."
-        />
-        <Textarea
-          label="Observability notes"
-          rows={3}
-          value={settings.observabilityNotes || ""}
-          onChange={(e) =>
-            setSettings((p) => ({ ...p, observabilityNotes: e.target.value }))
-          }
-          hint="Where you watch Auth spikes, failed deliveries, WhatsApp webhooks…"
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          loading={saving}
-          onClick={() => save({ observabilityNotes: settings.observabilityNotes || "" })}
-        >
-          Save notes
-        </Button>
+        />}
+        {matchesQuery(search, "Observability notes") && (
+          <>
+            <Textarea
+              label="Observability notes"
+              rows={3}
+              value={settings.observabilityNotes || ""}
+              onChange={(e) =>
+                setSettings((p) => ({ ...p, observabilityNotes: e.target.value }))
+              }
+              hint="Where you watch Auth spikes, failed deliveries, WhatsApp webhooks…"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              loading={saving}
+              onClick={() => save({ observabilityNotes: settings.observabilityNotes || "" })}
+            >
+              Save notes
+            </Button>
+          </>
+        )}
       </Card>
 
       <Card className="space-y-3">
@@ -140,7 +149,7 @@ export default function AdminSettings() {
           Walk through before go-live. Details:{" "}
           <code className="text-xs">docs/SECURITY_REVIEW.md</code>
         </p>
-        {SECURITY_REVIEW_CHECKLIST.map((item) => (
+        {SECURITY_REVIEW_CHECKLIST.filter((item) => matchesQuery(search, item.label, item.key)).map((item) => (
           <Checkbox
             key={item.key}
             label={item.label}
@@ -157,7 +166,7 @@ export default function AdminSettings() {
           Backups, deploy, rollback, handover — see{" "}
           <code className="text-xs">docs/PHASE9_HARDENING.md</code>
         </p>
-        {PRODUCTION_READINESS_CHECKLIST.map((item) => (
+        {PRODUCTION_READINESS_CHECKLIST.filter((item) => matchesQuery(search, item.label, item.key)).map((item) => (
           <Checkbox
             key={item.key}
             label={item.label}

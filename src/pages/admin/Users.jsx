@@ -11,6 +11,8 @@ import {
   Select,
   Button,
   Alert,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
 
 export default function AdminUsers() {
@@ -18,6 +20,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
   const load = async () => {
@@ -44,7 +47,11 @@ export default function AdminUsers() {
     await load();
   };
 
-  const filtered = users.filter((u) => !filter || u.role === filter);
+  const filtered = users.filter(
+    (u) =>
+      (!filter || u.role === filter) &&
+      matchesQuery(search, u.displayName, u.email, u.role, u.accountStatus)
+  );
 
   if (loading) {
     return (
@@ -62,6 +69,8 @@ export default function AdminUsers() {
       />
 
       {error && <Alert variant="error">{error}</Alert>}
+
+      <SearchBox value={search} onChange={setSearch} placeholder="Search name, email, or role" />
 
       <Select
         className="max-w-xs"

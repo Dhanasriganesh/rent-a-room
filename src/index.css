@@ -656,7 +656,61 @@ a:focus-visible {
 }
 
 .manager-shell__content > main {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+  overflow-wrap: break-word;
   padding-bottom: max(2rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)));
+}
+
+@media (max-width: 639px) {
+  .manager-shell__content > main .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.75rem;
+  }
+}
+
+.manager-shell__content .page-header {
+  margin-bottom: 0.7rem;
+}
+
+.manager-shell__content .page-header__subtitle {
+  display: none;
+}
+
+.manager-shell__content .page-header__row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.manager-shell__content .page-header__title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: #2c1810;
+}
+
+.manager-shell__content .page-header__title::before {
+  content: "";
+  width: 0.28rem;
+  height: 0.95rem;
+  flex: none;
+  border-radius: 999px;
+  background: #ff8c00;
+}
+
+.manager-shell__content > main :is(button, a).rounded-xl,
+.manager-shell__content > main a.inline-flex.rounded-lg {
+  padding: 0.28rem 0.65rem !important;
+  font-size: 0.75rem !important;
+  line-height: 1.25;
+  gap: 0.3rem;
+  border-radius: 0.5rem;
 }
 
 /* Login — glass card (matches dashboard float) */

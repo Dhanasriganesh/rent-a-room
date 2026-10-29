@@ -3422,6 +3422,7 @@ export async function createContractTemplate(data, actorUserId) {
   const body = data.body || DEFAULT_CONTRACT_TEMPLATE_BODY;
   const payload = {
     name: data.name || "Standard rental agreement",
+    category: data.category || "rental_agreement",
     ownerRecordId: data.ownerRecordId || null,
     propertyId: data.propertyId || null,
     body,
@@ -3452,6 +3453,7 @@ export async function createContractTemplateVersion(templateId, data, actorUserI
   const body = data.body ?? prev.body;
   const payload = {
     name: data.name || prev.name,
+    category: data.category || prev.category || "other",
     ownerRecordId: data.ownerRecordId ?? prev.ownerRecordId,
     propertyId: data.propertyId ?? prev.propertyId,
     body,
@@ -3523,15 +3525,23 @@ export async function buildContractFieldsFromAllocation(allocationId, overrides 
       allocation.applicantName ||
       application?.applicantName ||
       "",
+    tenant_email: application?.applicantEmail || allocation.applicantEmail || "",
+    tenant_phone: application?.applicantPhone || allocation.applicantPhone || "",
+    property_name: property?.name || "",
     property_address: addressParts.join(", "),
+    property_city: property?.city || "",
+    property_postal_code: property?.postalCode || "",
     room_label: room?.label || "",
     bed_label: bed?.label || "",
-    contract_start_date: allocation.startDate || "",
+    contract_start_date: allocation.startDate || application?.desiredMoveIn || "",
     contract_end_date: allocation.plannedEndDate || overrides.contract_end_date || "",
+    document_date: new Date().toISOString().slice(0, 10),
     monthly_rent:
       allocation.agreedMonthlyRent != null ? String(allocation.agreedMonthlyRent) : "",
     security_deposit:
       allocation.agreedDeposit != null ? String(allocation.agreedDeposit) : "",
+    number_of_occupants:
+      application?.numberOfOccupants != null ? String(application.numberOfOccupants) : "",
     currency: allocation.currency || "EUR",
     contract_reference: overrides.contract_reference || makeContractReference(),
     ...overrides,

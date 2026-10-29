@@ -266,7 +266,7 @@ export default function Listings() {
         <div
           className={
             viewMode === "grid"
-              ? "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+              ? "grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3"
               : "space-y-4"
           }
         >

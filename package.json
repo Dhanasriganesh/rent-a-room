@@ -21,6 +21,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "date-fns": "^4.4.0",
     "firebase": "^13.0.0",
+    "jspdf": "^4.2.1",
     "nodemailer": "^6.10.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

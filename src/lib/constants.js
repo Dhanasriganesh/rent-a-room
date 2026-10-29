@@ -94,15 +94,29 @@ export const RENEWAL_REQUEST_STATUSES = [
 export const CONTRACT_PLACEHOLDERS = [
   { key: "owner_legal_name", label: "Owner legal name", required: true },
   { key: "tenant_full_name", label: "Tenant full name", required: true },
+  { key: "tenant_email", label: "Tenant email", required: false },
+  { key: "tenant_phone", label: "Tenant phone", required: false },
+  { key: "property_name", label: "Property name", required: false },
   { key: "property_address", label: "Property address", required: true },
+  { key: "property_city", label: "City", required: false },
+  { key: "property_postal_code", label: "Postal code", required: false },
   { key: "room_label", label: "Room label", required: true },
   { key: "bed_label", label: "Bed label", required: true },
   { key: "contract_start_date", label: "Start date", required: true },
   { key: "contract_end_date", label: "End date", required: false },
+  { key: "document_date", label: "Document date", required: false },
   { key: "monthly_rent", label: "Monthly rent", required: true },
   { key: "security_deposit", label: "Security deposit", required: true },
+  { key: "number_of_occupants", label: "Number of occupants", required: false },
   { key: "contract_reference", label: "Contract reference", required: true },
   { key: "currency", label: "Currency", required: false },
+];
+
+export const DOCUMENT_CATEGORIES = [
+  { value: "rental_agreement", label: "Rental agreement" },
+  { value: "anmelden", label: "Anmelden application" },
+  { value: "contract", label: "Contract document" },
+  { value: "other", label: "Other" },
 ];
 
 export const MAINTENANCE_CATEGORIES = [

@@ -236,7 +236,7 @@ export default function OwnerProperties() {
           }
         />
       ) : viewMode === "grid" ? (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
           {properties.map((property) => (
             <PropertyCard
               key={property.id}
@@ -382,14 +382,14 @@ function PropertyCard({ property, onEdit, onDelete, onView, getPropertyTypeLabel
   return (
     <Card className="card-hover relative overflow-hidden">
       {/* Property Image Placeholder */}
-      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-br from-primary/20 to-primary/5" />
+      <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-br from-primary/20 to-primary/5 sm:h-24" />
       
-      <div className="relative pt-16">
+      <div className="relative pt-10 sm:pt-16">
         {/* Header */}
         <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white shadow-md border border-gray-100">
-              <FiHome className="h-7 w-7 text-primary" />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-md sm:h-14 sm:w-14 sm:rounded-xl">
+              <FiHome className="h-5 w-5 text-primary sm:h-7 sm:w-7" />
             </div>
             <div>
               <h3 className="font-semibold text-gray-900 line-clamp-1">{property.name}</h3>

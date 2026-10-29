@@ -274,7 +274,7 @@ export default function ManagerRent() {
       {message && <Alert variant="success">{message}</Alert>}
       {error && !payModal && !adjustModal && <Alert variant="error">{error}</Alert>}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
         <StatsCard label="Open charges" value={stats.open} icon={FiDollarSign} />
         <StatsCard label="Overdue" value={stats.overdue} icon={FiDollarSign} trend="down" />
         <StatsCard
@@ -290,18 +290,17 @@ export default function ManagerRent() {
         />
       </div>
 
-      <Card className="!p-4 space-y-3">
+      <Card className="!p-3 sm:!p-4 space-y-3">
         <h2 className="font-semibold text-gray-900">Generate monthly charges</h2>
         <p className="text-sm text-gray-500">
           Creates one charge per reserved/active allocation for the period. Reruns skip existing
           allocation+period rows (idempotent). Mid-month starts without a proration rule are flagged
           for review — not auto-prorated.
         </p>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:items-end">
           <Input
             label="Year"
             type="number"
-            className="!w-28"
             value={genYear}
             onChange={(e) => setGenYear(e.target.value)}
           />
@@ -310,7 +309,6 @@ export default function ManagerRent() {
             type="number"
             min={1}
             max={12}
-            className="!w-24"
             value={genMonth}
             onChange={(e) => setGenMonth(e.target.value)}
           />
@@ -319,17 +317,16 @@ export default function ManagerRent() {
             type="number"
             min={1}
             max={28}
-            className="!w-24"
             value={dueDay}
             onChange={(e) => setDueDay(e.target.value)}
           />
-          <Button loading={busy} onClick={runGenerate}>
+          <Button loading={busy} onClick={runGenerate} className="w-full">
             Generate
           </Button>
         </div>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Select
           label="Period"
           value={periodFilter}
@@ -374,7 +371,7 @@ export default function ManagerRent() {
             const paid = Number(c.paidAmount) || 0;
             const balance = Math.max(0, Number(c.balance ?? due - paid));
             return (
-              <Card key={c.id} className="!p-4">
+              <Card key={c.id} className="!p-3 sm:!p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">

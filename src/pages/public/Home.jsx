@@ -150,7 +150,7 @@ export default function Home() {
           ) : (
             <>
               {previewProperties.length > 0 && (
-                <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-10 sm:gap-6 lg:grid-cols-3">
                   {previewProperties.map((property) => (
                     <PropertyCard key={property.id} property={property} />
                   ))}
@@ -164,7 +164,7 @@ export default function Home() {
               {previewListings.length > 0 && (
                 <div className="mt-12">
                   <h3 className="text-lg font-semibold text-[#2C1810]">Published listings</h3>
-                  <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3">
                     {previewListings.map((listing) => (
                       <Link
                         key={listing.id}
@@ -215,11 +215,11 @@ export default function Home() {
           <p className="mt-3 max-w-xl text-[#2C1810]/55">
             Look first. The desk creates your login when a room is yours.
           </p>
-          <div className="mt-12 grid gap-6 sm:grid-cols-3">
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:mt-12 sm:grid-cols-3 sm:gap-6">
             {steps.map((step, i) => (
               <div
                 key={step.title}
-                className="rounded-[1.5rem] border border-white/55 bg-white/40 p-6 backdrop-blur-sm"
+                className="rounded-2xl border border-white/55 bg-white/40 p-3 backdrop-blur-sm sm:rounded-[1.5rem] sm:p-6"
               >
                 <span className="text-xs font-semibold uppercase tracking-wider text-[#FF8C00]">
                   Step {i + 1}
@@ -237,13 +237,13 @@ export default function Home() {
           <h2 className="font-serif text-3xl font-medium text-[#2C1810] sm:text-4xl">
             Built for real rentals
           </h2>
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:mt-12 sm:gap-5 lg:grid-cols-4">
             {perks.map((perk) => {
               const PerkIcon = perk.icon;
               return (
                 <div
                   key={perk.title}
-                  className="rounded-2xl border border-white/50 bg-white/35 p-5"
+                  className="rounded-xl border border-white/50 bg-white/35 p-3 sm:rounded-2xl sm:p-5"
                 >
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#2C1810] text-white">
                     <PerkIcon className="h-4 w-4" />
@@ -333,13 +333,11 @@ function PropertyCard({ property }) {
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-[#2C1810]">{property.name || "Property"}</h3>
-          <span className="shrink-0 rounded-full bg-[#2C1810]/5 px-2 py-0.5 text-xs text-[#2C1810]/70">
-            {available > 0 ? `${available} available` : "Ask the desk"}
-          </span>
-        </div>
+      <div className="flex flex-1 flex-col p-2.5 sm:p-4">
+        <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-[#2C1810] sm:text-base">{property.name || "Property"}</h3>
+        <span className="mt-1 inline-block max-w-full truncate rounded-full bg-[#2C1810]/5 px-1.5 py-0.5 text-[10px] text-[#2C1810]/70 sm:px-2 sm:text-xs">
+          {available > 0 ? `${available} available` : "Ask the desk"}
+        </span>
         <p className="mt-1 flex items-center gap-1 text-sm text-[#2C1810]/55">
           <FiMapPin className="h-4 w-4 shrink-0" />
           {[property.city, String(property.propertyType || "").replaceAll("_", " ")]
@@ -347,9 +345,9 @@ function PropertyCard({ property }) {
             .join(" · ") || "Germany"}
         </p>
         {property.description && (
-          <p className="mt-2 line-clamp-2 text-sm text-[#2C1810]/60">{property.description}</p>
+          <p className="mt-2 hidden text-sm text-[#2C1810]/60 sm:line-clamp-2 sm:block">{property.description}</p>
         )}
-        <p className="mt-auto pt-3 text-sm font-semibold text-[#FF8C00]">
+        <p className="mt-auto pt-2 text-xs font-semibold text-[#FF8C00] sm:pt-3 sm:text-sm">
           {price ? (
             <>
               From {price}

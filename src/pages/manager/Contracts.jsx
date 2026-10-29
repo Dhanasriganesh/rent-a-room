@@ -12,6 +12,8 @@ import {
   previewContractDraft,
   generateContractDraft,
   approveContract,
+  extractPlaceholders,
+  renderContractTemplate,
   issueContract,
   voidContract,
   getAllRenewalRequests,
@@ -21,9 +23,11 @@ import {
 import {
   CONTRACT_STATUSES,
   CONTRACT_PLACEHOLDERS,
+  DOCUMENT_CATEGORIES,
   DEFAULT_CONTRACT_TEMPLATE_BODY,
   RENEWAL_REQUEST_STATUSES,
 } from "../../lib/constants";
+import { downloadTextPdf } from "../../lib/documentPdf";
 import {
   PageHeader,
   Card,
@@ -36,15 +40,21 @@ import {
   Textarea,
   Alert,
   Badge,
-  Tabs,
+  SearchBox,
+  matchesQuery,
 } from "../../components/ui";
-import { FiFileText, FiPlus } from "react-icons/fi";
+import { FiFileText, FiUpload } from "react-icons/fi";
 
 const statusLabel = (list, v) => list.find((s) => s.value === v)?.label || v;
+const categoryLabel = (value) =>
+  DOCUMENT_CATEGORIES.find((c) => c.value === value)?.label || "Other";
+const fieldLabel = (key) =>
+  CONTRACT_PLACEHOLDERS.find((p) => p.key === key)?.label || key.replace(/_/g, " ");
 
 export default function ManagerContracts() {
   const { user } = useAuth();
-  const [tab, setTab] = useState("contracts");
+  const [categoryFilter, setCategoryFilter] = useState("rental_agreement");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -58,13 +68,12 @@ export default function ManagerContracts() {
 
   const [templateModal, setTemplateModal] = useState(false);
   const [versionOf, setVersionOf] = useState(null);
-  const [genModal, setGenModal] = useState(false);
-  const [preview, setPreview] = useState(null);
   const [viewContract, setViewContract] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const [tplForm, setTplForm] = useState({
     name: "Standard rental agreement",
+    category: "rental_agreement",
     ownerRecordId: "",
     propertyId: "",
     body: DEFAULT_CONTRACT_TEMPLATE_BODY,
@@ -74,10 +83,9 @@ export default function ManagerContracts() {
   const [genForm, setGenForm] = useState({
     allocationId: "",
     templateId: "",
-    contract_end_date: "",
-    tenant_full_name: "",
-    owner_legal_name: "",
   });
+  const [docFields, setDocFields] = useState({});
+  const [fieldsLoading, setFieldsLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -98,8 +106,8 @@ export default function ManagerContracts() {
       setOwners(own);
       setProperties(props);
       setRenewals(rens);
-      if (!genForm.templateId && tpls[0]) {
-        setGenForm((p) => ({ ...p, templateId: tpls[0].id }));
+      if (tpls[0]) {
+        setGenForm((p) => (p.templateId ? p : { ...p, templateId: tpls[0].id }));
       }
     } catch (err) {
       console.error(err);
@@ -122,6 +130,7 @@ export default function ManagerContracts() {
     setVersionOf(null);
     setTplForm({
       name: "Standard rental agreement",
+      category: categoryFilter,
       ownerRecordId: "",
       propertyId: "",
       body: DEFAULT_CONTRACT_TEMPLATE_BODY,
@@ -134,6 +143,7 @@ export default function ManagerContracts() {
     setVersionOf(tpl);
     setTplForm({
       name: tpl.name,
+      category: tpl.category || "other",
       ownerRecordId: tpl.ownerRecordId || "",
       propertyId: tpl.propertyId || "",
       body: tpl.body || DEFAULT_CONTRACT_TEMPLATE_BODY,
@@ -163,61 +173,95 @@ export default function ManagerContracts() {
     }
   };
 
-  const runPreview = async () => {
-    setSaving(true);
-    setError("");
-    setPreview(null);
-    try {
-      const result = await previewContractDraft({
-        allocationId: genForm.allocationId,
-        templateId: genForm.templateId,
-        fieldOverrides: {
-          contract_end_date: genForm.contract_end_date || undefined,
-          tenant_full_name: genForm.tenant_full_name || undefined,
-          owner_legal_name: genForm.owner_legal_name || undefined,
-        },
-      });
-      setPreview(result);
-      if (!result.ok) {
-        setError(`Missing required: ${result.missing.join(", ")}`);
-      }
-    } catch (err) {
-      setError(err.message || "Preview failed");
-    } finally {
-      setSaving(false);
+  useEffect(() => {
+    if (!genForm.allocationId || !genForm.templateId) {
+      setDocFields({});
+      return undefined;
     }
-  };
+    let cancelled = false;
+    setFieldsLoading(true);
+    previewContractDraft({
+      allocationId: genForm.allocationId,
+      templateId: genForm.templateId,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        const template = templates.find((t) => t.id === genForm.templateId);
+        const keys = extractPlaceholders(template?.body || "");
+        const next = {};
+        for (const key of keys) {
+          next[key] = result.fields?.[key] || "";
+        }
+        setDocFields(next);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Could not load tenant details");
+      })
+      .finally(() => {
+        if (!cancelled) setFieldsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [genForm.allocationId, genForm.templateId, templates]);
+
+  const livePreview = useMemo(() => {
+    const template = templates.find((t) => t.id === genForm.templateId);
+    if (!template || !Object.keys(docFields).length) return null;
+    return renderContractTemplate(template.body, docFields);
+  }, [templates, genForm.templateId, docFields]);
 
   const runGenerate = async () => {
     setSaving(true);
     setError("");
     try {
+      const template = templates.find((t) => t.id === genForm.templateId);
       const result = await generateContractDraft(
         {
           allocationId: genForm.allocationId,
           templateId: genForm.templateId,
-          fieldOverrides: {
-            contract_end_date: genForm.contract_end_date || undefined,
-            tenant_full_name: genForm.tenant_full_name || undefined,
-            owner_legal_name: genForm.owner_legal_name || undefined,
-          },
+          fieldOverrides: docFields,
         },
         user.uid
       );
-      setGenModal(false);
-      setPreview(null);
-      setMessage(`Draft ${result.contractReference} created`);
+      await approveContract(result.id, user.uid);
+      downloadTextPdf({
+        title: template?.name || "Rental document",
+        body: result.preview?.body || "",
+        filename: result.contractReference,
+      });
+      setDocFields({});
+      setMessage(`Approved and downloaded ${result.contractReference}`);
       await load();
-      setTab("contracts");
     } catch (err) {
       setError(
         err.missing?.length
-          ? `Blocked — missing: ${err.missing.join(", ")}`
+          ? `Fill these fields first: ${err.missing.join(", ")}`
           : err.message || "Generation failed"
       );
     } finally {
       setSaving(false);
     }
+  };
+
+  const onTemplateFile = async (file) => {
+    if (!file) return;
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".txt")) {
+      setError("Upload a .txt file. Fixed wording stays as normal text. Changing fields use {{name}} tokens.");
+      return;
+    }
+    const text = await file.text();
+    if (!text.trim()) {
+      setError("That file is empty.");
+      return;
+    }
+    setError("");
+    setTplForm((p) => ({
+      ...p,
+      body: text.replace(/^\uFEFF/, ""),
+      name: p.name || file.name.replace(/\.txt$/i, ""),
+    }));
   };
 
   const onApprove = async (id) => {
@@ -281,13 +325,33 @@ export default function ManagerContracts() {
         user.uid
       );
       setMessage(`Renewal draft ${result.contractReference} created (prior contract kept)`);
-      setTab("contracts");
       await load();
     } catch (err) {
       setError(err.message || "Renewal draft failed");
     } finally {
       setSaving(false);
     }
+  };
+
+  const visibleContracts = contracts.filter((c) =>
+    matchesQuery(search, c.contractReference, c.applicantName, c.status, c.startDate, c.endDate, c.monthlyRent)
+  );
+  const visibleTemplates = templates.filter((t) =>
+    matchesQuery(search, t.name, t.status, t.category, categoryLabel(t.category), ...(t.placeholders || []))
+  );
+  const visibleRenewals = renewals.filter((r) =>
+    matchesQuery(search, r.applicantName, r.status, r.contractId)
+  );
+  const templatesInCategory = visibleTemplates.filter(
+    (t) => (t.category || "other") === categoryFilter && t.status === "active"
+  );
+  const propertyName = (id) => properties.find((p) => p.id === id)?.name || "";
+
+  const chooseCategory = (value) => {
+    setCategoryFilter(value);
+    const next = activeTemplates.find((t) => (t.category || "other") === value);
+    setGenForm((current) => ({ ...current, templateId: next?.id || "" }));
+    setDocFields({});
   };
 
   if (loading) {
@@ -301,173 +365,215 @@ export default function ManagerContracts() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Contracts & documents"
-        subtitle="Templates, drafts, approval — not automatic legal signing"
+        title="Rental documents"
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={openNewTemplate}>
-              New template
-            </Button>
-            <Button
-              className="gap-2"
-              onClick={() => {
-                setPreview(null);
-                setGenModal(true);
-              }}
-              disabled={!activeTemplates.length || !allocations.length}
-            >
-              <FiPlus /> Generate draft
-            </Button>
-          </div>
+          <Button variant="outline" className="gap-1" onClick={openNewTemplate}>
+            <FiUpload /> Upload template
+          </Button>
         }
       />
 
       {message && <Alert variant="success">{message}</Alert>}
-      {error && !templateModal && !genModal && <Alert variant="error">{error}</Alert>}
+      {error && !templateModal && <Alert variant="error">{error}</Alert>}
 
-      <Alert variant="info">
-        Drafts use named placeholders (e.g. {"{{tenant_full_name}}"}). Missing required fields
-        block generation. Approved contracts are stored privately in Firestore — not public URLs.
-        A generated PDF is never treated as signed.
-      </Alert>
+      <SearchBox value={search} onChange={setSearch} placeholder="Search a template, tenant, or document" />
 
-      <Tabs
-        tabs={[
-          { id: "contracts", label: `Contracts (${contracts.length})` },
-          { id: "templates", label: `Templates (${templates.length})` },
-          { id: "renewals", label: `Renewals (${renewals.length})` },
-        ]}
-        activeTab={tab}
-        onChange={setTab}
-      />
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        {DOCUMENT_CATEGORIES.map((item) => {
+          const count = templates.filter(
+            (t) => (t.category || "other") === item.value && t.status === "active"
+          ).length;
+          const active = categoryFilter === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => chooseCategory(item.value)}
+              className={`rounded-lg px-2 py-2 text-left ${
+                active ? "bg-[#2C1810] text-white" : "bg-[#f6f3ef] text-[#2C1810]"
+              }`}
+            >
+              <span className="block text-base font-semibold leading-none">{count}</span>
+              <span className={`mt-1 block text-[10px] leading-tight ${active ? "text-white/80" : "text-[#2C1810]/60"}`}>
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-      {tab === "contracts" && (
-        <div className="space-y-3">
-          {contracts.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={FiFileText}
-                title="No contracts yet"
-                description="Allocate a bed, then generate a draft from a template."
-              />
-            </Card>
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+        <Card padding={false}>
+          <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+            <p className="text-sm font-semibold text-gray-900">{categoryLabel(categoryFilter)}</p>
+            <button type="button" className="text-xs font-medium text-primary" onClick={openNewTemplate}>
+              Upload
+            </button>
+          </div>
+          {templatesInCategory.length === 0 ? (
+            <div className="px-3 py-6 text-center">
+              <p className="text-sm text-gray-600">No {categoryLabel(categoryFilter).toLowerCase()} template yet.</p>
+              <p className="mt-1 text-xs text-gray-400">Upload a .txt file. Fixed text stays as written. Changing fields use {"{{tenant_full_name}}"}.</p>
+              <Button size="sm" className="mt-3 gap-1" onClick={openNewTemplate}>
+                <FiUpload /> Upload .txt
+              </Button>
+            </div>
           ) : (
-            contracts.map((c) => (
-              <Card key={c.id} className="!p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold text-gray-900">{c.contractReference}</h3>
+            <ul className="divide-y divide-gray-100">
+              {templatesInCategory.map((t) => {
+                const selected = genForm.templateId === t.id;
+                return (
+                  <li key={t.id} className={`flex items-center gap-2 px-3 py-2.5 ${selected ? "bg-[#fff4e8]" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGenForm((current) => ({ ...current, templateId: t.id }));
+                        setDocFields({});
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block truncate text-sm font-medium text-gray-900">{t.name}</span>
+                      <span className="mt-0.5 block truncate text-[11px] text-gray-500">
+                        {(t.placeholders || []).length} fields · v{t.version}
+                      </span>
+                    </button>
+                    <button type="button" className="shrink-0 text-[11px] font-medium text-primary" onClick={() => openVersion(t)}>
+                      Replace
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="!p-3 sm:!p-4">
+          <p className="text-sm font-semibold text-gray-900">Fill from a placed applicant</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Select
+              label="Placed applicant"
+              value={genForm.allocationId}
+              onChange={(e) => setGenForm((p) => ({ ...p, allocationId: e.target.value }))}
+              options={allocations.map((a) => ({
+                value: a.id,
+                label: `${a.applicantName || "Unnamed"}${propertyName(a.propertyId) ? ` · ${propertyName(a.propertyId)}` : ""}`,
+              }))}
+              placeholder="Select who was placed"
+            />
+            <Select
+              label="Template"
+              value={genForm.templateId}
+              onChange={(e) => setGenForm((p) => ({ ...p, templateId: e.target.value }))}
+              options={templatesInCategory.map((t) => ({ value: t.id, label: t.name }))}
+              placeholder="Select a template"
+            />
+          </div>
+          {fieldsLoading && <p className="mt-3 text-sm text-gray-500">Loading name, address, and dates…</p>}
+          {Object.keys(docFields).length > 0 && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {Object.keys(docFields).map((key) => (
+                <Input
+                  key={key}
+                  label={fieldLabel(key)}
+                  type={key.includes("date") ? "date" : "text"}
+                  value={docFields[key]}
+                  onChange={(e) => setDocFields((current) => ({ ...current, [key]: e.target.value }))}
+                />
+              ))}
+            </div>
+          )}
+          {livePreview?.ok && (
+            <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-[#f6f3ef] p-3 text-xs text-gray-800">
+              {livePreview.body}
+            </pre>
+          )}
+          {livePreview && !livePreview.ok && (
+            <p className="mt-3 text-xs text-amber-700">
+              Still empty: {livePreview.missing.map(fieldLabel).join(", ")}.
+            </p>
+          )}
+          <div className="mt-3 flex justify-end">
+            <Button
+              type="button"
+              loading={saving}
+              disabled={!genForm.allocationId || !genForm.templateId || !livePreview?.ok}
+              onClick={runGenerate}
+            >
+              Approve and generate PDF
+            </Button>
+          </div>
+        </Card>
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm font-semibold text-gray-900">Generated documents</p>
+        {visibleContracts.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            {search ? "No documents match that search." : "Approved PDFs will be listed here."}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {visibleContracts.map((c) => (
+              <Card key={c.id} className="!p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="truncate text-sm font-medium text-gray-900">{c.applicantName || "Tenant"}</p>
                       <Badge>{statusLabel(CONTRACT_STATUSES, c.status)}</Badge>
-                      <Badge variant="default">v{c.version}</Badge>
                     </div>
-                    <p className="mt-1 text-sm text-gray-600">
-                      {c.applicantName || "Tenant"} · €{Number(c.monthlyRent).toLocaleString()}/mo
-                      {c.startDate ? ` · from ${c.startDate}` : ""}
-                      {c.endDate ? ` · ends ${c.endDate}` : " · no end date"}
-                      {c.supersedesContractId ? " · renewal" : ""}
+                    <p className="mt-0.5 truncate text-xs text-gray-500">
+                      {c.contractReference}
+                      {c.startDate ? ` · ${c.startDate}` : ""}
+                      {c.endDate ? ` to ${c.endDate}` : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => setViewContract(c)}>
-                      Preview
+                      Open
                     </Button>
-                    {c.status === "draft" && (
-                      <Button size="sm" onClick={() => onApprove(c.id)}>
-                        Approve
-                      </Button>
-                    )}
-                    {c.status === "approved" && (
-                      <Button size="sm" onClick={() => onIssue(c.id)}>
-                        Issue to tenant
-                      </Button>
-                    )}
-                    {["draft", "approved", "issued"].includes(c.status) && (
-                      <Button size="sm" variant="ghost" onClick={() => onVoid(c.id)}>
-                        Void
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        downloadTextPdf({
+                          title: c.contractReference,
+                          body: c.body,
+                          filename: c.contractReference,
+                        })
+                      }
+                    >
+                      PDF
+                    </Button>
                   </div>
                 </div>
               </Card>
-            ))
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
-      {tab === "templates" && (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-500">
-            Placeholders:{" "}
-            {CONTRACT_PLACEHOLDERS.map((p) => `{{${p.key}}}`).join(", ")}
-          </p>
-          {templates.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={FiFileText}
-                title="No templates"
-                description="Create a template with named placeholders."
-                action={<Button onClick={openNewTemplate}>New template</Button>}
-              />
-            </Card>
-          ) : (
-            templates.map((t) => (
-              <Card key={t.id} className="!p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold text-gray-900">{t.name}</h3>
-                      <Badge variant={t.status === "active" ? "success" : "default"}>
-                        {t.status} · v{t.version}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {(t.placeholders || []).join(", ") || "No placeholders detected"}
-                    </p>
-                  </div>
-                  {t.status === "active" && (
-                    <Button size="sm" variant="outline" onClick={() => openVersion(t)}>
-                      New version
-                    </Button>
-                  )}
+      {visibleRenewals.length > 0 && (
+        <details className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
+          <summary className="cursor-pointer font-medium text-gray-800">
+            Renewal requests ({visibleRenewals.length})
+          </summary>
+          <div className="mt-2 space-y-2">
+            {visibleRenewals.map((r) => (
+              <div key={r.id} className="flex flex-col gap-2 border-t border-gray-100 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Badge>{statusLabel(RENEWAL_REQUEST_STATUSES, r.status)}</Badge>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {r.requestedStartDate || "?"} → {r.requestedEndDate || "?"}
+                  </p>
                 </div>
-              </Card>
-            ))
-          )}
-        </div>
-      )}
-
-      {tab === "renewals" && (
-        <div className="space-y-3">
-          {renewals.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={FiFileText}
-                title="No renewal requests"
-                description="Tenants can request renewal from their documents page."
-              />
-            </Card>
-          ) : (
-            renewals.map((r) => (
-              <Card key={r.id} className="!p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <Badge>{statusLabel(RENEWAL_REQUEST_STATUSES, r.status)}</Badge>
-                    <p className="mt-2 text-sm text-gray-700">{r.message || "No message"}</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {r.requestedStartDate || "?"} → {r.requestedEndDate || "?"}
-                    </p>
-                  </div>
-                  {["submitted", "under_review", "approved"].includes(r.status) && (
-                    <Button size="sm" loading={saving} onClick={() => fulfillRenewal(r)}>
-                      Generate renewal draft
-                    </Button>
-                  )}
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
+                {["submitted", "under_review", "approved"].includes(r.status) && (
+                  <Button size="sm" loading={saving} onClick={() => fulfillRenewal(r)}>
+                    Generate renewal draft
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       <Modal
@@ -484,6 +590,23 @@ export default function ManagerContracts() {
             value={tplForm.name}
             onChange={(e) => setTplForm((p) => ({ ...p, name: e.target.value }))}
           />
+          <Select
+            label="Document type"
+            value={tplForm.category}
+            onChange={(e) => setTplForm((p) => ({ ...p, category: e.target.value }))}
+            options={DOCUMENT_CATEGORIES}
+          />
+          <label className="flex cursor-pointer flex-col items-center rounded-lg border border-dashed border-[#2C1810]/25 bg-[#f6f3ef] px-3 py-4 text-center">
+            <FiUpload className="h-4 w-4 text-[#2C1810]" />
+            <span className="mt-1 text-sm font-medium text-[#2C1810]">Upload a .txt template</span>
+            <span className="mt-0.5 text-[11px] text-[#2C1810]/60">Fixed sentences as normal text. Fields like {"{{tenant_full_name}}"}.</span>
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              className="mt-2 block w-full text-xs text-gray-600"
+              onChange={(e) => onTemplateFile(e.target.files?.[0])}
+            />
+          </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
               label="Owner (optional)"
@@ -506,7 +629,7 @@ export default function ManagerContracts() {
             required
             value={tplForm.body}
             onChange={(e) => setTplForm((p) => ({ ...p, body: e.target.value }))}
-            hint="Use {{placeholder}} tokens. Original versions are kept when you create a new version."
+            hint="Fixed text stays as written. Changing fields must look like {{tenant_full_name}}. You can edit the text after the file loads."
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setTemplateModal(false)}>
@@ -517,92 +640,6 @@ export default function ManagerContracts() {
             </Button>
           </div>
         </form>
-      </Modal>
-
-      <Modal
-        isOpen={genModal}
-        onClose={() => setGenModal(false)}
-        title="Generate contract draft"
-        size="lg"
-      >
-        <div className="space-y-4">
-          {error && <Alert variant="error">{error}</Alert>}
-          <Select
-            label="Allocation"
-            required
-            value={genForm.allocationId}
-            onChange={(e) => setGenForm((p) => ({ ...p, allocationId: e.target.value }))}
-            options={allocations.map((a) => ({
-              value: a.id,
-              label: `${a.applicantName || a.id.slice(0, 8)} · from ${a.startDate || "?"}`,
-            }))}
-            placeholder="Select allocation"
-          />
-          <Select
-            label="Template"
-            required
-            value={genForm.templateId}
-            onChange={(e) => setGenForm((p) => ({ ...p, templateId: e.target.value }))}
-            options={activeTemplates.map((t) => ({
-              value: t.id,
-              label: `${t.name} v${t.version}`,
-            }))}
-            placeholder="Select template"
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Override tenant name (if empty on allocation)"
-              value={genForm.tenant_full_name}
-              onChange={(e) => setGenForm((p) => ({ ...p, tenant_full_name: e.target.value }))}
-            />
-            <Input
-              label="Override owner legal name"
-              value={genForm.owner_legal_name}
-              onChange={(e) => setGenForm((p) => ({ ...p, owner_legal_name: e.target.value }))}
-            />
-            <Input
-              label="End date override"
-              type="date"
-              value={genForm.contract_end_date}
-              onChange={(e) => setGenForm((p) => ({ ...p, contract_end_date: e.target.value }))}
-            />
-          </div>
-          {preview && (
-            <Card className="!p-3">
-              {preview.ok ? (
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-sm text-gray-800">
-                  {preview.body}
-                </pre>
-              ) : (
-                <Alert variant="warning">
-                  Missing: {preview.missing.join(", ")}. Fix allocation/owner data or overrides.
-                </Alert>
-              )}
-            </Card>
-          )}
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setGenModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              loading={saving}
-              disabled={!genForm.allocationId || !genForm.templateId}
-              onClick={runPreview}
-            >
-              Preview / validate
-            </Button>
-            <Button
-              type="button"
-              loading={saving}
-              disabled={!genForm.allocationId || !genForm.templateId || (preview && !preview.ok)}
-              onClick={runGenerate}
-            >
-              Create draft
-            </Button>
-          </div>
-        </div>
       </Modal>
 
       <Modal
@@ -620,9 +657,36 @@ export default function ManagerContracts() {
             <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm">
               {viewContract.body}
             </pre>
-            <Alert variant="warning">
-              This is a system draft/record — not a signed legal instrument.
-            </Alert>
+            <div className="flex flex-wrap justify-end gap-2">
+              {viewContract.status === "draft" && (
+                <Button type="button" size="sm" onClick={() => onApprove(viewContract.id)}>
+                  Approve
+                </Button>
+              )}
+              {viewContract.status === "approved" && (
+                <Button type="button" size="sm" variant="outline" onClick={() => onIssue(viewContract.id)}>
+                  Issue to tenant
+                </Button>
+              )}
+              {["draft", "approved", "issued"].includes(viewContract.status) && (
+                <Button type="button" size="sm" variant="ghost" onClick={() => onVoid(viewContract.id)}>
+                  Void
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() =>
+                  downloadTextPdf({
+                    title: viewContract.contractReference,
+                    body: viewContract.body,
+                    filename: viewContract.contractReference,
+                  })
+                }
+              >
+                Download PDF
+              </Button>
+            </div>
           </div>
         )}
       </Modal>

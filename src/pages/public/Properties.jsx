@@ -52,7 +52,7 @@ export default function Properties() {
           </p>
         </div>
       ) : (
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-10 sm:gap-6 lg:grid-cols-3">
           {properties.map((property) => (
             <PropertyCard key={property.id} property={property} />
           ))}
@@ -79,13 +79,11 @@ function PropertyCard({ property }) {
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h2 className="font-semibold text-[#2C1810]">{property.name || "Property"}</h2>
-          <span className="shrink-0 rounded-full bg-[#2C1810]/5 px-2 py-0.5 text-xs text-[#2C1810]/70">
-            {available > 0 ? `${available} available` : "Ask the desk"}
-          </span>
-        </div>
+      <div className="flex flex-1 flex-col p-2.5 sm:p-4">
+        <h2 className="line-clamp-2 text-sm font-semibold leading-tight text-[#2C1810] sm:text-base">{property.name || "Property"}</h2>
+        <span className="mt-1 inline-block max-w-full truncate rounded-full bg-[#2C1810]/5 px-1.5 py-0.5 text-[10px] text-[#2C1810]/70 sm:px-2 sm:text-xs">
+          {available > 0 ? `${available} available` : "Ask the desk"}
+        </span>
         <p className="mt-1 flex items-center gap-1 text-sm text-[#2C1810]/55">
           <FiMapPin className="h-4 w-4 shrink-0" />
           {[property.city, String(property.propertyType || "").replaceAll("_", " ")]
@@ -93,9 +91,9 @@ function PropertyCard({ property }) {
             .join(" · ") || "Germany"}
         </p>
         {property.description && (
-          <p className="mt-2 line-clamp-2 text-sm text-[#2C1810]/60">{property.description}</p>
+          <p className="mt-2 hidden text-sm text-[#2C1810]/60 sm:line-clamp-2 sm:block">{property.description}</p>
         )}
-        <p className="mt-auto pt-3 text-sm font-semibold text-[#FF8C00]">
+        <p className="mt-auto pt-2 text-xs font-semibold text-[#FF8C00] sm:pt-3 sm:text-sm">
           {price ? (
             <>
               From {price}

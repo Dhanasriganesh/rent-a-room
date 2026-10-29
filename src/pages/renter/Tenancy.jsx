@@ -151,7 +151,7 @@ export default function RenterTenancy() {
         </div>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
         <Card className="text-center">
           <FiDollarSign className="mx-auto h-7 w-7 text-primary" />
           <p className="mt-2 text-2xl font-bold text-gray-900">
