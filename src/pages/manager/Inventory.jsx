@@ -286,7 +286,11 @@ export default function ManagerInventory() {
         )}
       </Card>
 
-      <SearchBox value={search} onChange={setSearch} placeholder="Search room or bed" />
+      <SearchBox
+        value={search}
+        onChange={setSearch}
+        placeholder="Search room, bed, or occupant"
+      />
 
       {message && <Alert variant="success">{message}</Alert>}
       {error && !roomModal && !bedModal && !offerModal && (
@@ -334,7 +338,14 @@ export default function ManagerInventory() {
               const roomHit = matchesQuery(search, room.label, room.roomType, room.status, room.notes);
               if (!String(search).trim() || roomHit) return room;
               const beds = (room.beds || []).filter((bed) =>
-                matchesQuery(search, bed.label, bed.status, bed.notes)
+                matchesQuery(
+                  search,
+                  bed.label,
+                  bed.status,
+                  bed.notes,
+                  bed.occupantName,
+                  bed.occupantEmail
+                )
               );
               return beds.length ? { ...room, beds } : null;
             })
@@ -345,7 +356,14 @@ export default function ManagerInventory() {
               const roomHit = matchesQuery(search, room.label, room.roomType, room.status, room.notes);
               if (!String(search).trim() || roomHit) return room;
               const beds = (room.beds || []).filter((bed) =>
-                matchesQuery(search, bed.label, bed.status, bed.notes)
+                matchesQuery(
+                  search,
+                  bed.label,
+                  bed.status,
+                  bed.notes,
+                  bed.occupantName,
+                  bed.occupantEmail
+                )
               );
               return beds.length ? { ...room, beds } : null;
             })
@@ -392,16 +410,51 @@ export default function ManagerInventory() {
                 <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
                   {room.beds.map((bed) => {
                     const offer = activeOffers[bed.id];
+                    const hasOccupant =
+                      bed.occupantName ||
+                      bed.occupantEmail ||
+                      bed.applicationId ||
+                      ["reserved", "occupied"].includes(bed.status);
                     return (
                       <li
                         key={bed.id}
                         className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium text-gray-900">{bed.label}</span>
                             <Badge variant={bedBadge(bed.status)}>{bed.status}</Badge>
                           </div>
+                          {hasOccupant ? (
+                            <p className="mt-1 text-sm text-gray-800">
+                              <span className="text-gray-500">
+                                {bed.status === "occupied" ? "Occupied by" : "Reserved for"}{" "}
+                              </span>
+                              {bed.applicationId ? (
+                                <Link
+                                  to={`/manager/applicants?open=${bed.applicationId}`}
+                                  className="font-medium text-primary hover:underline"
+                                >
+                                  {bed.occupantName || bed.occupantEmail || "Applicant"}
+                                </Link>
+                              ) : (
+                                <span className="font-medium">
+                                  {bed.occupantName || bed.occupantEmail || "Unknown applicant"}
+                                </span>
+                              )}
+                              {bed.occupantName && bed.occupantEmail ? (
+                                <span className="text-gray-500"> · {bed.occupantEmail}</span>
+                              ) : null}
+                              {bed.allocationStartDate ? (
+                                <span className="text-gray-400">
+                                  {" "}
+                                  · from {String(bed.allocationStartDate).slice(0, 10)}
+                                </span>
+                              ) : null}
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-sm text-emerald-700">Available — no applicant</p>
+                          )}
                           <p className="mt-0.5 text-sm text-gray-500">
                             {offer
                               ? `€${Number(offer.monthlyRent).toLocaleString()}/mo · deposit €${Number(

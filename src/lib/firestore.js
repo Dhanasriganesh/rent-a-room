@@ -681,12 +681,42 @@ export async function updateApplicationStatus(applicationId, status, note = "", 
 
 export async function getAllApplications(status = null) {
   const conditions = status ? [{ field: "status", operator: "==", value: status }] : [];
-  return queryDocuments(
+  const rows = await queryDocuments(
     COLLECTIONS.APPLICATIONS,
     conditions,
     { field: "submittedAt", direction: "desc" },
     200
   );
+
+  // Fill missing room/bed labels from allocations for older placed applications
+  const needsPlacement = rows.filter(
+    (a) => a.allocationId && (!a.bedLabel || !a.roomLabel || !a.propertyName)
+  );
+  if (!needsPlacement.length) return rows;
+
+  const allocations = await Promise.all(
+    needsPlacement.map((a) =>
+      getDocument(COLLECTIONS.ALLOCATIONS, a.allocationId).catch(() => null)
+    )
+  );
+  const byAppId = {};
+  needsPlacement.forEach((a, i) => {
+    if (allocations[i]) byAppId[a.id] = allocations[i];
+  });
+
+  return rows.map((app) => {
+    const allocation = byAppId[app.id];
+    if (!allocation) return app;
+    return {
+      ...app,
+      propertyId: app.propertyId || allocation.propertyId || null,
+      propertyName: app.propertyName || allocation.propertyName || "",
+      roomId: app.roomId || allocation.roomId || null,
+      roomLabel: app.roomLabel || allocation.roomLabel || "",
+      bedId: app.bedId || allocation.bedId || null,
+      bedLabel: app.bedLabel || allocation.bedLabel || "",
+    };
+  });
 }
 
 export async function updateApplicationNotes(applicationId, internalNotes, actorUserId = null) {
@@ -2492,8 +2522,32 @@ export async function provisionRenterAccountWithCredentials(
   }
 
   if (allocationId) {
+    const allocation = await getDocument(COLLECTIONS.ALLOCATIONS, allocationId);
     await updateDocument(COLLECTIONS.ALLOCATIONS, allocationId, {
       tenantUserId: uid,
+    });
+    if (allocation?.bedId) {
+      await updateDocument(COLLECTIONS.BEDS, allocation.bedId, {
+        currentTenantUserId: uid,
+        currentApplicantName: name || allocation.applicantName || "",
+        currentApplicantEmail: normalizedEmail,
+      }).catch(() => {});
+    }
+    await syncUserHousingPlacement(uid, {
+      applicationId: allocation?.applicationId || applicationId,
+      allocationId,
+      tenantUserId: uid,
+      applicantName: name || allocation?.applicantName || "",
+      applicantEmail: normalizedEmail,
+      propertyId: allocation?.propertyId || null,
+      propertyName: allocation?.propertyName || "",
+      roomId: allocation?.roomId || null,
+      roomLabel: allocation?.roomLabel || "",
+      bedId: allocation?.bedId || null,
+      bedLabel: allocation?.bedLabel || "",
+      startDate: allocation?.startDate || null,
+      plannedEndDate: allocation?.plannedEndDate || null,
+      status: allocation?.status || "reserved",
     });
   }
 
@@ -2981,12 +3035,45 @@ export async function getPropertyInventory(propertyId) {
     getUnitsByProperty(propertyId),
   ]);
 
+  const allocationIds = [
+    ...new Set(beds.map((b) => b.currentAllocationId).filter(Boolean)),
+  ];
+  const allocations = await Promise.all(
+    allocationIds.map((id) => getDocument(COLLECTIONS.ALLOCATIONS, id).catch(() => null))
+  );
+  const allocationById = Object.fromEntries(
+    allocations.filter(Boolean).map((a) => [a.id, a])
+  );
+
+  const enrichBed = (bed) => {
+    const allocation = bed.currentAllocationId
+      ? allocationById[bed.currentAllocationId]
+      : null;
+    const room = rooms.find((r) => r.id === bed.roomId);
+    return {
+      ...bed,
+      roomLabel: room?.label || bed.roomLabel || "",
+      occupantName:
+        bed.currentApplicantName ||
+        allocation?.applicantName ||
+        "",
+      occupantEmail:
+        bed.currentApplicantEmail ||
+        allocation?.applicantEmail ||
+        "",
+      applicationId: bed.currentApplicationId || allocation?.applicationId || null,
+      allocationStatus: allocation?.status || null,
+      allocationStartDate: allocation?.startDate || null,
+    };
+  };
+
+  const enrichedBeds = beds.map(enrichBed);
   const roomsWithBeds = rooms.map((room) => ({
     ...room,
-    beds: beds.filter((b) => b.roomId === room.id),
+    beds: enrichedBeds.filter((b) => b.roomId === room.id),
   }));
 
-  return { property, rooms: roomsWithBeds, beds, units };
+  return { property, rooms: roomsWithBeds, beds: enrichedBeds, units };
 }
 
 // ============================================================================
@@ -3089,6 +3176,8 @@ export async function allocateBedAtomically(
   const allocationId = allocationRef.id;
   let propertyIdForCounts = null;
 
+  let placementSnapshot = null;
+
   await runTransaction(db, async (tx) => {
     const bedRef = doc(db, COLLECTIONS.BEDS, bedId);
     const appRef = doc(db, COLLECTIONS.APPLICATIONS, applicationId);
@@ -3119,14 +3208,49 @@ export async function allocateBedAtomically(
       throw new Error("This application already has an allocation");
     }
 
+    let roomLabel = "";
+    let propertyName = "";
+    if (bed.roomId) {
+      const roomSnap = await tx.get(doc(db, COLLECTIONS.ROOMS, bed.roomId));
+      if (roomSnap.exists()) roomLabel = roomSnap.data().label || "";
+    }
+    if (bed.propertyId) {
+      const propSnap = await tx.get(doc(db, COLLECTIONS.PROPERTIES, bed.propertyId));
+      if (propSnap.exists()) propertyName = propSnap.data().name || "";
+    }
+
+    const applicantName = app.applicantName || "";
+    const applicantEmail = String(app.applicantEmail || "").trim().toLowerCase();
+    const bedLabel = bed.label || "";
+
+    placementSnapshot = {
+      applicationId,
+      allocationId,
+      tenantUserId: app.renterId || null,
+      applicantName,
+      applicantEmail,
+      propertyId: bed.propertyId,
+      propertyName,
+      roomId: bed.roomId,
+      roomLabel,
+      bedId,
+      bedLabel,
+      startDate,
+      plannedEndDate: plannedEndDate || null,
+      status: "reserved",
+    };
+
     tx.set(allocationRef, {
       applicationId,
       tenantUserId: app.renterId || null,
-      applicantName: app.applicantName || "",
-      applicantEmail: app.applicantEmail || "",
+      applicantName,
+      applicantEmail,
       propertyId: bed.propertyId,
+      propertyName,
       roomId: bed.roomId,
+      roomLabel,
       bedId,
+      bedLabel,
       startDate,
       plannedEndDate: plannedEndDate || null,
       actualEndDate: null,
@@ -3143,6 +3267,10 @@ export async function allocateBedAtomically(
     tx.update(bedRef, {
       status: "reserved",
       currentAllocationId: allocationId,
+      currentApplicationId: applicationId,
+      currentApplicantName: applicantName,
+      currentApplicantEmail: applicantEmail,
+      currentTenantUserId: app.renterId || null,
       updatedAt: serverTimestamp(),
     });
 
@@ -3150,8 +3278,12 @@ export async function allocateBedAtomically(
       status: "allocated",
       allocationId,
       propertyId: bed.propertyId,
+      propertyName,
       roomId: bed.roomId,
+      roomLabel,
       bedId,
+      bedLabel,
+      allocatedAt: serverTimestamp(),
       decidedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -3161,6 +3293,29 @@ export async function allocateBedAtomically(
     await refreshPropertyInventoryCounts(propertyIdForCounts);
   }
 
+  let tenantUserId = placementSnapshot?.tenantUserId || null;
+  if (!tenantUserId && placementSnapshot?.applicantEmail) {
+    tenantUserId = await findUserIdByEmail(placementSnapshot.applicantEmail).catch(() => null);
+    if (tenantUserId) {
+      placementSnapshot.tenantUserId = tenantUserId;
+      await updateDocument(COLLECTIONS.APPLICATIONS, applicationId, {
+        renterId: tenantUserId,
+      }).catch(() => {});
+      await updateDocument(COLLECTIONS.ALLOCATIONS, allocationId, {
+        tenantUserId,
+      }).catch(() => {});
+      if (placementSnapshot.bedId) {
+        await updateDocument(COLLECTIONS.BEDS, placementSnapshot.bedId, {
+          currentTenantUserId: tenantUserId,
+        }).catch(() => {});
+      }
+    }
+  }
+
+  if (tenantUserId && placementSnapshot) {
+    await syncUserHousingPlacement(tenantUserId, placementSnapshot);
+  }
+
   if (actorUserId) {
     await createAuditLog(actorUserId, "allocation.create", "allocation", allocationId, null, {
       applicationId,
@@ -3168,9 +3323,8 @@ export async function allocateBedAtomically(
     });
   }
 
-  const app = await getDocument(COLLECTIONS.APPLICATIONS, applicationId);
-  if (app?.renterId) {
-    await createNotification(app.renterId, "allocation_confirmed", {
+  if (tenantUserId) {
+    await createNotification(tenantUserId, "allocation_confirmed", {
       title: "Room allocated",
       message: "A room/bed has been reserved for you. Contract steps come next.",
       link: "/my-home/applications",
@@ -3182,6 +3336,29 @@ export async function allocateBedAtomically(
   return allocationId;
 }
 
+/** Keep the user document as the place that holds their current housing. */
+export async function syncUserHousingPlacement(userId, placement) {
+  if (!userId || !placement) return;
+  await updateDocument(COLLECTIONS.USERS, userId, {
+    currentHousing: {
+      applicationId: placement.applicationId || null,
+      allocationId: placement.allocationId || null,
+      propertyId: placement.propertyId || null,
+      propertyName: placement.propertyName || "",
+      roomId: placement.roomId || null,
+      roomLabel: placement.roomLabel || "",
+      bedId: placement.bedId || null,
+      bedLabel: placement.bedLabel || "",
+      startDate: placement.startDate || null,
+      plannedEndDate: placement.plannedEndDate || null,
+      status: placement.status || "reserved",
+      applicantName: placement.applicantName || "",
+      applicantEmail: placement.applicantEmail || "",
+      updatedAt: new Date().toISOString(),
+    },
+  });
+}
+
 export async function getAllAllocations(status = null) {
   const conditions = status ? [{ field: "status", operator: "==", value: status }] : [];
   return queryDocuments(
@@ -3190,6 +3367,150 @@ export async function getAllAllocations(status = null) {
     { field: "createdAt", direction: "desc" },
     200
   );
+}
+
+export async function getAllocationByApplication(applicationId) {
+  if (!applicationId) return null;
+  const rows = await queryDocuments(
+    COLLECTIONS.ALLOCATIONS,
+    [{ field: "applicationId", operator: "==", value: applicationId }],
+    { field: "createdAt", direction: "desc" },
+    5
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Full person record for the applicants desk: application + housing + contracts + rent + docs.
+ */
+export async function getApplicantDossier(applicationId) {
+  const application = await getDocument(COLLECTIONS.APPLICATIONS, applicationId);
+  if (!application) throw new Error("Application not found");
+
+  let allocation = null;
+  if (application.allocationId) {
+    allocation = await getDocument(COLLECTIONS.ALLOCATIONS, application.allocationId);
+  }
+  if (!allocation) {
+    allocation = await getAllocationByApplication(applicationId);
+  }
+
+  const [property, room, bed, user] = await Promise.all([
+    application.propertyId || allocation?.propertyId
+      ? getDocument(COLLECTIONS.PROPERTIES, application.propertyId || allocation.propertyId)
+      : null,
+    application.roomId || allocation?.roomId
+      ? getDocument(COLLECTIONS.ROOMS, application.roomId || allocation.roomId)
+      : null,
+    application.bedId || allocation?.bedId
+      ? getDocument(COLLECTIONS.BEDS, application.bedId || allocation.bedId)
+      : null,
+    application.renterId || allocation?.tenantUserId
+      ? getDocument(COLLECTIONS.USERS, application.renterId || allocation.tenantUserId)
+      : null,
+  ]);
+
+  const email = String(application.applicantEmail || "").trim().toLowerCase();
+  const tenantUserId = application.renterId || allocation?.tenantUserId || null;
+
+  const [
+    contractsByEmail,
+    contractsByTenant,
+    charges,
+    docsByOwner,
+    docsByApplication,
+    moveEvents,
+  ] = await Promise.all([
+    email ? getContractsVisibleToApplicant(email).catch(() => []) : Promise.resolve([]),
+    tenantUserId ? getContractsForTenant(tenantUserId).catch(() => []) : Promise.resolve([]),
+    allocation?.id
+      ? queryDocuments(
+          COLLECTIONS.RENT_CHARGES,
+          [{ field: "allocationId", operator: "==", value: allocation.id }],
+          { field: "period", direction: "desc" },
+          50
+        ).catch(() => [])
+      : Promise.resolve([]),
+    tenantUserId
+      ? queryDocuments(
+          COLLECTIONS.DOCUMENTS,
+          [{ field: "ownerUserId", operator: "==", value: tenantUserId }],
+          { field: "createdAt", direction: "desc" },
+          50
+        ).catch(() => [])
+      : Promise.resolve([]),
+    queryDocuments(
+      COLLECTIONS.DOCUMENTS,
+      [{ field: "applicationId", operator: "==", value: applicationId }],
+      { field: "createdAt", direction: "desc" },
+      50
+    ).catch(() => []),
+    allocation?.id
+      ? queryDocuments(
+          COLLECTIONS.MOVE_EVENTS,
+          [{ field: "allocationId", operator: "==", value: allocation.id }],
+          { field: "createdAt", direction: "desc" },
+          20
+        ).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
+  const contractsById = new Map();
+  for (const c of [...contractsByEmail, ...contractsByTenant]) {
+    contractsById.set(c.id, c);
+  }
+  const linked = [...contractsById.values()].filter(
+    (c) =>
+      c.applicationId === applicationId ||
+      (allocation && c.allocationId === allocation.id)
+  );
+  const linkedContracts =
+    linked.length > 0
+      ? linked
+      : [...contractsById.values()].filter(
+          (c) =>
+            (email && c.applicantEmail === email) ||
+            (tenantUserId && c.tenantUserId === tenantUserId)
+        );
+
+  const documentsById = new Map();
+  for (const d of [...docsByOwner, ...docsByApplication]) {
+    documentsById.set(d.id, d);
+  }
+  const documents = [...documentsById.values()];
+
+  const housing = {
+    propertyId: property?.id || application.propertyId || allocation?.propertyId || null,
+    propertyName:
+      property?.name || application.propertyName || allocation?.propertyName || "",
+    propertyAddress: property
+      ? [property.address, property.postalCode, property.city].filter(Boolean).join(", ")
+      : "",
+    roomId: room?.id || application.roomId || allocation?.roomId || null,
+    roomLabel: room?.label || application.roomLabel || allocation?.roomLabel || "",
+    bedId: bed?.id || application.bedId || allocation?.bedId || null,
+    bedLabel: bed?.label || application.bedLabel || allocation?.bedLabel || "",
+    allocationId: allocation?.id || application.allocationId || null,
+    allocationStatus: allocation?.status || null,
+    startDate: allocation?.startDate || null,
+    plannedEndDate: allocation?.plannedEndDate || null,
+    monthlyRent: allocation?.agreedMonthlyRent ?? null,
+    deposit: allocation?.agreedDeposit ?? null,
+  };
+
+  return {
+    application,
+    allocation,
+    property,
+    room,
+    bed,
+    user,
+    housing,
+    contracts: linkedContracts,
+    charges,
+    documents,
+    moveEvents,
+  };
 }
 
 export async function getAllocationsByProperty(propertyId) {
@@ -3324,6 +3645,10 @@ export async function cancelAllocation(allocationId, actorUserId = null) {
         tx.update(bedRef, {
           status: "available",
           currentAllocationId: null,
+          currentApplicationId: null,
+          currentApplicantName: null,
+          currentApplicantEmail: null,
+          currentTenantUserId: null,
           updatedAt: serverTimestamp(),
         });
       }
@@ -3332,6 +3657,11 @@ export async function cancelAllocation(allocationId, actorUserId = null) {
 
   if (allocation.propertyId) {
     await refreshPropertyInventoryCounts(allocation.propertyId);
+  }
+  if (allocation.tenantUserId) {
+    await updateDocument(COLLECTIONS.USERS, allocation.tenantUserId, {
+      currentHousing: null,
+    }).catch(() => {});
   }
   if (actorUserId) {
     await createAuditLog(actorUserId, "allocation.cancel", "allocation", allocationId);

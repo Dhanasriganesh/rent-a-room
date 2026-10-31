@@ -8,8 +8,15 @@ import {
   updateApplicationStatus,
   updateApplicationNotes,
   getRoomsByProperty,
+  getApplicantDossier,
 } from "../../lib/firestore";
-import { APPLICATION_STATUSES, formatDate, formatRelativeDate } from "../../lib/constants";
+import {
+  APPLICATION_STATUSES,
+  CONTRACT_STATUSES,
+  DOCUMENT_CATEGORIES,
+  formatDate,
+  formatRelativeDate,
+} from "../../lib/constants";
 import {
   PageHeader,
   Card,
@@ -23,7 +30,7 @@ import {
   Alert,
   Badge,
 } from "../../components/ui";
-import { FiPlus, FiInbox, FiKey, FiArrowLeft } from "react-icons/fi";
+import { FiPlus, FiInbox, FiKey, FiArrowLeft, FiFileText, FiHome } from "react-icons/fi";
 
 const PIPELINE = [
   "new",
@@ -152,11 +159,44 @@ function queueForStatus(status) {
   return QUEUES.find((queue) => queue.statuses.includes(status))?.id || "review";
 }
 
+function placementLine(app) {
+  const room = app.roomLabel || "";
+  const bed = app.bedLabel || "";
+  if (room && bed) return `${room} · ${bed}`;
+  if (bed) return bed;
+  if (room) return room;
+  return "";
+}
+
+function contractStatusLabel(value) {
+  return CONTRACT_STATUSES.find((s) => s.value === value)?.label || String(value || "").replace(/_/g, " ");
+}
+
+function documentCategoryLabel(value) {
+  return DOCUMENT_CATEGORIES.find((c) => c.value === value)?.label || String(value || "").replace(/_/g, " ");
+}
+
+function money(amount, currency = "EUR") {
+  if (amount == null || amount === "") return "—";
+  const n = Number(amount);
+  if (Number.isNaN(n)) return String(amount);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currency || "EUR",
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return `€${n.toLocaleString()}`;
+  }
+}
+
 export default function ManagerApplicants() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialStatus = searchParams.get("status") || "";
+  const openId = searchParams.get("open") || "";
 
   const [apps, setApps] = useState([]);
   const [properties, setProperties] = useState([]);
@@ -170,6 +210,8 @@ export default function ManagerApplicants() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [dossier, setDossier] = useState(null);
+  const [dossierLoading, setDossierLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     applicantName: "",
@@ -217,6 +259,18 @@ export default function ManagerApplicants() {
       .catch(() => setRooms([]));
   }, [form.propertyId]);
 
+  useEffect(() => {
+    if (!openId || !apps.length) return;
+    if (detail?.id === openId) return;
+    const app = apps.find((row) => row.id === openId);
+    if (app) {
+      openDetail(app);
+      setQueue(queueForStatus(app.status));
+    }
+    // Intentionally only when openId or apps identity changes enough to find the row
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, apps]);
+
   const propertyName = (id) => properties.find((p) => p.id === id)?.name || "";
 
   const scoped = useMemo(() => {
@@ -224,7 +278,7 @@ export default function ManagerApplicants() {
       if (propertyFilter && app.propertyId !== propertyFilter) return false;
       if (search) {
         const q = search.toLowerCase();
-        const hay = `${app.applicantName || ""} ${app.applicantEmail || ""} ${app.applicantPhone || ""} ${app.listingTitle || ""}`.toLowerCase();
+        const hay = `${app.applicantName || ""} ${app.applicantEmail || ""} ${app.applicantPhone || ""} ${app.listingTitle || ""} ${app.propertyName || ""} ${app.roomLabel || ""} ${app.bedLabel || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -286,12 +340,38 @@ export default function ManagerApplicants() {
     }
   };
 
+  const loadDossier = async (applicationId) => {
+    setDossierLoading(true);
+    try {
+      const data = await getApplicantDossier(applicationId);
+      setDossier(data);
+      if (data?.application) {
+        setDetail((current) =>
+          current?.id === applicationId ? { ...current, ...data.application } : current
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      setDossier(null);
+      setError(err.message || "Could not load full person record");
+    } finally {
+      setDossierLoading(false);
+    }
+  };
+
   const openDetail = (app) => {
     setDetail(app);
+    setDossier(null);
     setNotesDraft(app.internalNotes || "");
     setStatusDraft(app.status);
     setDecisionNote(app.decisionNote || "");
     setError("");
+    if (searchParams.get("open") !== app.id) {
+      const next = new URLSearchParams(searchParams);
+      next.set("open", app.id);
+      setSearchParams(next, { replace: true });
+    }
+    loadDossier(app.id);
   };
 
   const saveNotes = async () => {
@@ -302,6 +382,7 @@ export default function ManagerApplicants() {
       setMessage("Notes saved");
       setDetail((current) => (current ? { ...current, internalNotes: notesDraft } : current));
       await load();
+      await loadDossier(detail.id);
     } catch (err) {
       setError(err.message || "Could not save notes");
     } finally {
@@ -322,6 +403,7 @@ export default function ManagerApplicants() {
       setMessage(`${detail.applicantName || "Applicant"} is now ${statusLabel(nextStatus).toLowerCase()}`);
       setQueue(queueForStatus(nextStatus));
       await load();
+      await loadDossier(detail.id);
     } catch (err) {
       setError(err.message || "Could not update status");
     } finally {
@@ -339,9 +421,20 @@ export default function ManagerApplicants() {
 
   const steps = detail ? NEXT_STEPS[detail.status] || [] : [];
   const submitted = detail ? asDate(detail.submittedAt || detail.createdAt) : null;
+  const housing = dossier?.housing;
   const placeName = detail
-    ? propertyName(detail.propertyId) || detail.listingTitle || "No property yet"
+    ? housing?.propertyName ||
+      detail.propertyName ||
+      propertyName(detail.propertyId) ||
+      detail.listingTitle ||
+      "No property yet"
     : "";
+  const assignedBed =
+    housing?.bedLabel || detail?.bedLabel
+      ? [housing?.roomLabel || detail?.roomLabel, housing?.bedLabel || detail?.bedLabel]
+          .filter(Boolean)
+          .join(" · ")
+      : "";
 
   return (
     <div className="space-y-4">
@@ -410,6 +503,9 @@ export default function ManagerApplicants() {
                 const active = detail?.id === app.id;
                 const when = asDate(app.submittedAt || app.createdAt);
                 const meta = statusMeta(app.status);
+                const place = placementLine(app);
+                const prop =
+                  app.propertyName || propertyName(app.propertyId) || app.listingTitle || "No property";
                 return (
                   <li key={app.id}>
                     <button
@@ -433,12 +529,17 @@ export default function ManagerApplicants() {
                         </span>
                         <span className="mt-0.5 flex items-center gap-1.5">
                           <span className="min-w-0 flex-1 truncate text-xs text-gray-500">
-                            {propertyName(app.propertyId) || app.listingTitle || "No property"}
+                            {place ? `${prop} · ${place}` : prop}
                           </span>
                           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${TONE[meta?.color] || TONE.default}`}>
                             {statusLabel(app.status)}
                           </span>
                         </span>
+                        {place ? (
+                          <span className="mt-0.5 block truncate text-[11px] font-medium text-[#2C1810]/70">
+                            Bed: {place}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   </li>
@@ -463,7 +564,13 @@ export default function ManagerApplicants() {
                 <button
                   type="button"
                   className="mb-2 text-sm font-medium text-primary lg:hidden"
-                  onClick={() => setDetail(null)}
+                  onClick={() => {
+                    setDetail(null);
+                    setDossier(null);
+                    const next = new URLSearchParams(searchParams);
+                    next.delete("open");
+                    setSearchParams(next, { replace: true });
+                  }}
                 >
                   <FiArrowLeft className="mr-1 inline" /> Queue
                 </button>
@@ -489,6 +596,46 @@ export default function ManagerApplicants() {
               <div className="space-y-4 p-3 sm:p-4">
                 {error && <Alert variant="error">{error}</Alert>}
 
+                {assignedBed ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-950">
+                    <div className="flex items-start gap-2">
+                      <FiHome className="mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-semibold">Assigned bed</p>
+                        <p>
+                          {placeName}
+                          {assignedBed ? ` · ${assignedBed}` : ""}
+                        </p>
+                        {(housing?.allocationStatus || housing?.startDate) && (
+                          <p className="mt-0.5 text-xs text-emerald-800/80">
+                            {[
+                              housing?.allocationStatus
+                                ? `Status: ${housing.allocationStatus}`
+                                : null,
+                              housing?.startDate
+                                ? `From ${formatDate(housing.startDate)}`
+                                : null,
+                              housing?.plannedEndDate
+                                ? `Until ${formatDate(housing.plannedEndDate)}`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        )}
+                        {(housing?.monthlyRent != null || housing?.deposit != null) && (
+                          <p className="mt-0.5 text-xs text-emerald-800/80">
+                            Rent {money(housing.monthlyRent, dossier?.allocation?.currency)}
+                            {housing.deposit != null
+                              ? ` · Deposit ${money(housing.deposit, dossier?.allocation?.currency)}`
+                              : ""}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                   <div>
                     <dt className="text-[11px] uppercase tracking-wide text-gray-400">Property</dt>
@@ -511,10 +658,24 @@ export default function ManagerApplicants() {
                       {detail.numberOfOccupants ? ` · ${detail.numberOfOccupants} people` : ""}
                     </dd>
                   </div>
-                  <div className="col-span-2">
-                    <dt className="text-[11px] uppercase tracking-wide text-gray-400">Room</dt>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                      Requested room
+                    </dt>
                     <dd className="text-gray-800">{detail.requestedRoomType || "Not specified"}</dd>
                   </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                      Assigned bed
+                    </dt>
+                    <dd className="text-gray-800">{assignedBed || "Not placed yet"}</dd>
+                  </div>
+                  {housing?.propertyAddress ? (
+                    <div className="col-span-2">
+                      <dt className="text-[11px] uppercase tracking-wide text-gray-400">Address</dt>
+                      <dd className="text-gray-800">{housing.propertyAddress}</dd>
+                    </div>
+                  ) : null}
                 </dl>
 
                 {detail.message && (
@@ -552,13 +713,184 @@ export default function ManagerApplicants() {
                   </Button>
                 )}
 
-                {detail.status === "allocated" && detail.allocationId && (
+                {(detail.allocationId || housing?.allocationId) && (
                   <Link
-                    to={`/manager/allocations?highlight=${detail.allocationId}`}
+                    to={`/manager/allocations?highlight=${detail.allocationId || housing.allocationId}`}
                     className="inline-flex items-center gap-1 text-sm font-medium text-primary"
                   >
                     <FiKey /> View allocation
                   </Link>
+                )}
+
+                {dossierLoading ? (
+                  <div className="flex items-center gap-2 py-4 text-sm text-gray-500">
+                    <Spinner size="sm" /> Loading related records…
+                  </div>
+                ) : (
+                  <>
+                    <section className="space-y-2 border-t border-gray-100 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900">Account</h3>
+                      {dossier?.user ? (
+                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                          <div>
+                            <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                              Login email
+                            </dt>
+                            <dd className="text-gray-800">{dossier.user.email || "—"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                              Role / status
+                            </dt>
+                            <dd className="text-gray-800">
+                              {dossier.user.role || "renter"}
+                              {dossier.user.accountStatus
+                                ? ` · ${dossier.user.accountStatus}`
+                                : ""}
+                            </dd>
+                          </div>
+                          <div className="col-span-2">
+                            <dt className="text-[11px] uppercase tracking-wide text-gray-400">
+                              Stored housing on user
+                            </dt>
+                            <dd className="text-gray-800">
+                              {dossier.user.currentHousing?.propertyName ||
+                              dossier.user.currentHousing?.bedLabel
+                                ? [
+                                    dossier.user.currentHousing.propertyName,
+                                    dossier.user.currentHousing.roomLabel,
+                                    dossier.user.currentHousing.bedLabel,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")
+                                : "Not written on user yet"}
+                            </dd>
+                          </div>
+                        </dl>
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          No login account linked yet. Provision from Allocations when ready.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="space-y-2 border-t border-gray-100 pt-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-gray-900">
+                          Rental documents
+                        </h3>
+                        <Link
+                          to={`/manager/contracts?applicationId=${detail.id}`}
+                          className="text-xs font-medium text-primary"
+                        >
+                          Open documents
+                        </Link>
+                      </div>
+                      {!dossier?.contracts?.length ? (
+                        <p className="text-sm text-gray-500">No contracts or rental documents yet.</p>
+                      ) : (
+                        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
+                          {dossier.contracts.map((c) => (
+                            <li
+                              key={c.id}
+                              className="flex items-start justify-between gap-2 px-3 py-2 text-sm"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-gray-900">
+                                  {c.title || c.category || "Document"}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {documentCategoryLabel(c.category)} ·{" "}
+                                  {contractStatusLabel(c.status)}
+                                </p>
+                              </div>
+                              <Link
+                                to={`/manager/contracts?highlight=${c.id}`}
+                                className="shrink-0 text-xs font-medium text-primary"
+                              >
+                                Open
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+
+                    <section className="space-y-2 border-t border-gray-100 pt-4">
+                      <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                        <FiFileText /> Uploaded files
+                      </h3>
+                      {!dossier?.documents?.length ? (
+                        <p className="text-sm text-gray-500">No uploaded files on this person.</p>
+                      ) : (
+                        <ul className="space-y-1.5 text-sm">
+                          {dossier.documents.map((docRow) => (
+                            <li key={docRow.id} className="flex items-center justify-between gap-2">
+                              <span className="truncate text-gray-800">
+                                {docRow.fileName || docRow.title || docRow.id}
+                                {docRow.category ? (
+                                  <span className="text-gray-400">
+                                    {" "}
+                                    · {documentCategoryLabel(docRow.category)}
+                                  </span>
+                                ) : null}
+                              </span>
+                              {docRow.fileUrl || docRow.downloadUrl || docRow.url ? (
+                                <a
+                                  href={docRow.fileUrl || docRow.downloadUrl || docRow.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="shrink-0 text-xs font-medium text-primary"
+                                >
+                                  View
+                                </a>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+
+                    <section className="space-y-2 border-t border-gray-100 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900">Rent charges</h3>
+                      {!dossier?.charges?.length ? (
+                        <p className="text-sm text-gray-500">No rent charges yet.</p>
+                      ) : (
+                        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100 text-sm">
+                          {dossier.charges.map((charge) => (
+                            <li
+                              key={charge.id}
+                              className="flex items-center justify-between gap-2 px-3 py-2"
+                            >
+                              <span className="text-gray-800">
+                                {charge.period || charge.label || "Charge"}
+                              </span>
+                              <span className="text-gray-600">
+                                {money(charge.amount, charge.currency)} ·{" "}
+                                {charge.status || "open"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+
+                    {dossier?.moveEvents?.length > 0 && (
+                      <section className="space-y-2 border-t border-gray-100 pt-4">
+                        <h3 className="text-sm font-semibold text-gray-900">Move events</h3>
+                        <ul className="space-y-1 text-sm text-gray-700">
+                          {dossier.moveEvents.map((ev) => (
+                            <li key={ev.id}>
+                              {ev.type || ev.eventType || "Event"}
+                              {ev.date || ev.createdAt
+                                ? ` · ${formatDate(ev.date || ev.createdAt)}`
+                                : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+                  </>
                 )}
 
                 <Textarea
