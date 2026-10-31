@@ -114,7 +114,7 @@ export const CONTRACT_PLACEHOLDERS = [
 
 export const DOCUMENT_CATEGORIES = [
   { value: "rental_agreement", label: "Rental agreement" },
-  { value: "anmelden", label: "Anmelden application" },
+  { value: "anmeldung", label: "Anmeldung" },
   { value: "contract", label: "Contract document" },
   { value: "other", label: "Other" },
 ];

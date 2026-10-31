@@ -4192,6 +4192,139 @@ export async function getAllContracts(status = null) {
   );
 }
 
+/**
+ * Save a generated Anmeldung (Wohnungsgeberbestätigung) as a rental document record.
+ * PDF bytes are optional (kept small); fieldValues are enough to regenerate.
+ */
+export async function saveAnmeldungDocument(
+  {
+    fields,
+    allocationId = null,
+    applicationId = null,
+    propertyId = null,
+    ownerRecordId = null,
+    tenantUserId = null,
+    applicantName = "",
+    applicantEmail = "",
+    applicantPhone = "",
+    pdfDataUrl = null,
+  },
+  actorUserId
+) {
+  const ref = `ANM-${makeContractReference().replace(/^RR-/, "")}`;
+  const summary = [
+    "Wohnungsgeberbestätigung (Anmeldung)",
+    `Wohnungsgeber: ${fields.wohnungsgeberName || ""}`,
+    `Wohnung: ${fields.wohnungStreet || ""}, ${fields.wohnungPlz || ""} ${fields.wohnungOrt || ""}`,
+    `Zusatz: ${fields.wohnungZusatz || ""}`,
+    `Einzug: ${fields.einzugDate || ""}`,
+    `Person: ${fields.tenantLastName || ""}, ${fields.tenantFirstName || ""}`,
+  ].join("\n");
+
+  const payload = {
+    category: "anmeldung",
+    documentKind: "anmeldung",
+    title: "Wohnungsgeberbestätigung (Anmeldung)",
+    tenantUserId: tenantUserId || null,
+    applicantName:
+      applicantName ||
+      `${fields.tenantFirstName || ""} ${fields.tenantLastName || ""}`.trim(),
+    applicantEmail: applicantEmail || "",
+    applicantPhone: applicantPhone || "",
+    ownerRecordId: ownerRecordId || null,
+    propertyId: propertyId || null,
+    allocationId: allocationId || null,
+    applicationId: applicationId || null,
+    templateId: null,
+    contractReference: ref,
+    version: 1,
+    startDate: fields.einzugDate || null,
+    endDate: null,
+    monthlyRent: 0,
+    depositAmount: 0,
+    currency: "EUR",
+    status: "approved",
+    body: summary,
+    bodyHtml: "",
+    fieldValues: { ...fields },
+    pdfDataUrl: pdfDataUrl || null,
+    generatedBy: actorUserId || null,
+    approvedBy: actorUserId || null,
+    approvedAt: serverTimestamp(),
+    issuedAt: null,
+    storage: {
+      type: pdfDataUrl ? "firestore_dataurl" : "regenerate",
+      note: "Anmeldung filled on official blank form",
+    },
+  };
+
+  const id = await createDocument(COLLECTIONS.CONTRACTS, payload);
+  if (actorUserId) {
+    await createAuditLog(actorUserId, "anmeldung.create", "contract", id, null, {
+      allocationId,
+      applicationId,
+    });
+  }
+  return { id, contractReference: ref };
+}
+
+/**
+ * Issue Anmeldung to a tenant account: attach PDF as their document + notify.
+ */
+export async function sendAnmeldungToTenant(
+  contractId,
+  {
+    tenantUserId,
+    file = null,
+    applicantName = "",
+    applicantEmail = "",
+    applicantPhone = "",
+  },
+  actorUserId
+) {
+  if (!contractId) throw new Error("Document required");
+  if (!tenantUserId) throw new Error("Select a tenant account to send to");
+
+  const contract = await getDocument(COLLECTIONS.CONTRACTS, contractId);
+  if (!contract) throw new Error("Anmeldung document not found");
+
+  await updateDocument(COLLECTIONS.CONTRACTS, contractId, {
+    status: "issued",
+    tenantUserId,
+    applicantName: applicantName || contract.applicantName || "",
+    applicantEmail: applicantEmail || contract.applicantEmail || "",
+    applicantPhone: applicantPhone || contract.applicantPhone || "",
+    issuedAt: serverTimestamp(),
+    issuedBy: actorUserId || null,
+  });
+
+  let documentId = null;
+  if (file) {
+    documentId = await uploadTenantDocumentFile(tenantUserId, {
+      file,
+      documentType: "anmeldung",
+      allocationId: contract.allocationId || null,
+    });
+  }
+
+  await createNotification(tenantUserId, "contract_issued", {
+    title: "Anmeldung ready",
+    message: `Your Wohnungsgeberbestätigung (${contract.contractReference}) is available.`,
+    link: "/my-home/documents",
+    entityType: "contract",
+    entityId: contractId,
+  });
+
+  if (actorUserId) {
+    await createAuditLog(actorUserId, "anmeldung.send", "contract", contractId, null, {
+      tenantUserId,
+      documentId,
+    });
+  }
+
+  return { contractId, documentId };
+}
+
 export async function getContractsForTenant(tenantUserId) {
   return queryDocuments(
     COLLECTIONS.CONTRACTS,

@@ -43,6 +43,8 @@ import {
   matchesQuery,
   OpenInWhatsApp,
 } from "../../components/ui";
+import AnmeldungPanel from "../../components/manager/AnmeldungPanel";
+import { downloadAnmeldungPdf } from "../../lib/anmeldungPdf";
 import { FiFileText, FiUpload } from "react-icons/fi";
 
 const statusLabel = (list, v) => list.find((s) => s.value === v)?.label || v;
@@ -337,9 +339,21 @@ export default function ManagerContracts() {
     }
   };
 
-  const visibleContracts = contracts.filter((c) =>
-    matchesQuery(search, c.contractReference, c.applicantName, c.status, c.startDate, c.endDate, c.monthlyRent)
-  );
+  const visibleContracts = contracts.filter((c) => {
+    const isAnmeldung = c.category === "anmeldung" || c.documentKind === "anmeldung";
+    if (categoryFilter === "anmeldung" && !isAnmeldung) return false;
+    if (categoryFilter !== "anmeldung" && isAnmeldung) return false;
+    return matchesQuery(
+      search,
+      c.contractReference,
+      c.applicantName,
+      c.status,
+      c.startDate,
+      c.endDate,
+      c.monthlyRent,
+      c.title
+    );
+  });
   const visibleTemplates = templates.filter((t) =>
     matchesQuery(search, t.name, t.status, t.category, categoryLabel(t.category), ...(t.placeholders || []))
   );
@@ -371,9 +385,11 @@ export default function ManagerContracts() {
       <PageHeader
         title="Rental documents"
         actions={
-          <Button variant="outline" className="gap-1" onClick={openNewTemplate}>
-            <FiUpload /> Upload template
-          </Button>
+          categoryFilter !== "anmeldung" ? (
+            <Button variant="outline" className="gap-1" onClick={openNewTemplate}>
+              <FiUpload /> Upload template
+            </Button>
+          ) : null
         }
       />
 
@@ -384,9 +400,12 @@ export default function ManagerContracts() {
 
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {DOCUMENT_CATEGORIES.map((item) => {
-          const count = templates.filter(
-            (t) => (t.category || "other") === item.value && t.status === "active"
-          ).length;
+          const count =
+            item.value === "anmeldung"
+              ? contracts.filter((c) => c.category === "anmeldung" || c.documentKind === "anmeldung").length
+              : templates.filter(
+                  (t) => (t.category || "other") === item.value && t.status === "active"
+                ).length;
           const active = categoryFilter === item.value;
           return (
             <button
@@ -406,6 +425,14 @@ export default function ManagerContracts() {
         })}
       </div>
 
+      {categoryFilter === "anmeldung" ? (
+        <AnmeldungPanel
+          allocations={allocations}
+          properties={properties}
+          owners={owners}
+          onSaved={load}
+        />
+      ) : (
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
         <Card padding={false}>
           <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
@@ -508,6 +535,7 @@ export default function ManagerContracts() {
           </div>
         </Card>
       </div>
+      )}
 
       <div>
         <p className="mb-2 text-sm font-semibold text-gray-900">Generated documents</p>
@@ -541,13 +569,21 @@ export default function ManagerContracts() {
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() =>
+                      onClick={() => {
+                        const isAnmeldung =
+                          c.category === "anmeldung" || c.documentKind === "anmeldung";
+                        if (isAnmeldung && c.fieldValues) {
+                          downloadAnmeldungPdf(c.fieldValues, {
+                            filename: c.contractReference,
+                          }).catch((err) => setError(err.message || "PDF download failed"));
+                          return;
+                        }
                         downloadTextPdf({
                           title: c.contractReference,
                           body: c.body,
                           filename: c.contractReference,
-                        }).catch((err) => setError(err.message || "PDF download failed"))
-                      }
+                        }).catch((err) => setError(err.message || "PDF download failed"));
+                      }}
                     >
                       PDF
                     </Button>
