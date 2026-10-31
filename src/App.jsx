@@ -12,9 +12,11 @@ import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import SuperadminLogin from "./pages/auth/SuperadminLogin";
 
+import ManagerDashboardLayout from "./components/layouts/ManagerDashboardLayout";
+import ManagerOverview from "./pages/manager/Overview";
+
 const OwnerDashboardLayout = lazy(() => import("./components/layouts/OwnerDashboardLayout"));
 const RenterDashboardLayout = lazy(() => import("./components/layouts/RenterDashboardLayout"));
-const ManagerDashboardLayout = lazy(() => import("./components/layouts/ManagerDashboardLayout"));
 
 const AcceptInvite = lazy(() => import("./pages/auth/AcceptInvite"));
 const JoinInvite = lazy(() => import("./pages/auth/JoinInvite"));
@@ -53,7 +55,6 @@ const RenterMessages = lazy(() => import("./pages/renter/Messages"));
 const RenterRequests = lazy(() => import("./pages/renter/Requests"));
 const RenterSettings = lazy(() => import("./pages/renter/Settings"));
 
-const ManagerOverview = lazy(() => import("./pages/manager/Overview"));
 const ManagerOwners = lazy(() => import("./pages/manager/Owners"));
 const ManagerProperties = lazy(() => import("./pages/manager/Properties"));
 const ManagerInventory = lazy(() => import("./pages/manager/Inventory"));

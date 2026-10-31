@@ -667,6 +667,14 @@ a:focus-visible {
   .manager-shell__content > main .space-y-6 > :not([hidden]) ~ :not([hidden]) {
     margin-top: 0.75rem;
   }
+
+  /* Blur is expensive on phones and keeps the UI feeling stuck after data arrives */
+  .glass-float,
+  .glass-topbar-btn,
+  .manager-topbar__cluster {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 .manager-shell__content .page-header {

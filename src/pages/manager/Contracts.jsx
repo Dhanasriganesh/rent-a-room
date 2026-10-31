@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getActiveContractTemplates,
   getAllContractTemplates,
   createContractTemplate,
   createContractTemplateVersion,
@@ -91,28 +90,32 @@ export default function ManagerContracts() {
     setLoading(true);
     setError("");
     try {
-      const [tpls, allTpl, cons, allocs, own, props, rens] = await Promise.all([
-        getActiveContractTemplates(),
+      // First paint: only what the form needs. Phones stay blank too long if we wait on every list.
+      const [allTpl, allocs] = await Promise.all([
         getAllContractTemplates(),
-        getAllContracts(),
         getAllAllocations(),
+      ]);
+      setTemplates(allTpl);
+      setAllocations(allocs.filter((a) => ["reserved", "active"].includes(a.status)));
+      const firstActive = allTpl.find((t) => t.status === "active");
+      if (firstActive) {
+        setGenForm((p) => (p.templateId ? p : { ...p, templateId: firstActive.id }));
+      }
+      setLoading(false);
+
+      const [cons, own, props, rens] = await Promise.all([
+        getAllContracts(),
         getAllOwners(),
         getAllProperties(),
         getAllRenewalRequests(),
       ]);
-      setTemplates(allTpl);
       setContracts(cons);
-      setAllocations(allocs.filter((a) => ["reserved", "active"].includes(a.status)));
       setOwners(own);
       setProperties(props);
       setRenewals(rens);
-      if (tpls[0]) {
-        setGenForm((p) => (p.templateId ? p : { ...p, templateId: tpls[0].id }));
-      }
     } catch (err) {
       console.error(err);
       setError(err.message || "Failed to load contracts");
-    } finally {
       setLoading(false);
     }
   };
@@ -225,7 +228,7 @@ export default function ManagerContracts() {
         user.uid
       );
       await approveContract(result.id, user.uid);
-      downloadTextPdf({
+      await downloadTextPdf({
         title: template?.name || "Rental document",
         body: result.preview?.body || "",
         filename: result.contractReference,
@@ -538,7 +541,7 @@ export default function ManagerContracts() {
                           title: c.contractReference,
                           body: c.body,
                           filename: c.contractReference,
-                        })
+                        }).catch((err) => setError(err.message || "PDF download failed"))
                       }
                     >
                       PDF
@@ -681,7 +684,7 @@ export default function ManagerContracts() {
                     title: viewContract.contractReference,
                     body: viewContract.body,
                     filename: viewContract.contractReference,
-                  })
+                  }).catch((err) => setError(err.message || "PDF download failed"))
                 }
               >
                 Download PDF

@@ -1,7 +1,6 @@
-import jsPDF from "jspdf";
-
-/** Download a filled document as an A4 PDF. Fixed template text plus edited field values. */
-export function downloadTextPdf({ title, body, filename }) {
+/** Download a filled document as an A4 PDF. jsPDF loads only when a download starts. */
+export async function downloadTextPdf({ title, body, filename }) {
+  const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const margin = 16;
   const width = doc.internal.pageSize.getWidth() - margin * 2;

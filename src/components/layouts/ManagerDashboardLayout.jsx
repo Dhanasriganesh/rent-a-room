@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { Avatar } from "../ui";
+import { Avatar, Spinner } from "../ui";
 import {
   FiGrid,
   FiHome,
@@ -299,7 +299,15 @@ export default function ManagerDashboardLayout() {
           </div>
         </header>
         <main className="min-w-0 max-w-full flex-1 overflow-x-clip px-3 pb-8 pt-3 sm:px-6 sm:pt-4 lg:px-8">
-          <Outlet />
+          <Suspense
+            fallback={
+              <div className="flex min-h-[30vh] items-center justify-center">
+                <Spinner size="lg" />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

@@ -11,6 +11,7 @@ export default defineConfig({
           firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
           react: ['react', 'react-dom', 'react-router-dom'],
           icons: ['react-icons/fi'],
+          jspdf: ['jspdf'],
         },
       },
     },
