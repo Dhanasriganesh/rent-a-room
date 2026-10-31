@@ -56,6 +56,7 @@ const RenterRequests = lazy(() => import("./pages/renter/Requests"));
 const RenterSettings = lazy(() => import("./pages/renter/Settings"));
 
 const ManagerOwners = lazy(() => import("./pages/manager/Owners"));
+const ManagerOwnerDetail = lazy(() => import("./pages/manager/OwnerDetail"));
 const ManagerProperties = lazy(() => import("./pages/manager/Properties"));
 const ManagerInventory = lazy(() => import("./pages/manager/Inventory"));
 const ManagerShareLinks = lazy(() => import("./pages/manager/ShareLinks"));
@@ -197,8 +198,16 @@ export default function App() {
               <Route
                 path="owners"
                 element={
-                  <ProtectedRoute allowedRoles={["property_manager"]}>
+                  <ProtectedRoute allowedRoles={["admin", "property_manager"]}>
                     <ManagerOwners />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="owners/:id"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "property_manager"]}>
+                    <ManagerOwnerDetail />
                   </ProtectedRoute>
                 }
               />

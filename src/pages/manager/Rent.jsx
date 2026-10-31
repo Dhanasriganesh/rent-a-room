@@ -23,6 +23,7 @@ import {
   Alert,
   Badge,
   StatsCard,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiDollarSign, FiRefreshCw } from "react-icons/fi";
 
@@ -390,6 +391,7 @@ export default function ManagerRent() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <OpenInWhatsApp phone={c.applicantPhone} always />
                     {!["paid", "waived", "cancelled"].includes(c.status) && (
                       <Button size="sm" onClick={() => openPay(c)}>
                         Record payment

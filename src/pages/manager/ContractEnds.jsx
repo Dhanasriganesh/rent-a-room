@@ -11,6 +11,7 @@ import {
   Badge,
   SearchBox,
   matchesQuery,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiCalendar } from "react-icons/fi";
 
@@ -230,11 +231,17 @@ export default function ContractEnds() {
                     Ends {formatEnd(end)}
                   </p>
                 </div>
-                <p className="text-sm font-medium text-gray-800">
-                  {leave === "can_leave" && "Contract finished"}
-                  {leave === "stays" && `Stays until ${formatEnd(end)}`}
-                  {leave === "open" && "Set an end date on the contract"}
-                </p>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <OpenInWhatsApp
+                    phone={contract.applicantPhone || contract.fieldValues?.tenant_phone}
+                    always
+                  />
+                  <p className="text-sm font-medium text-gray-800">
+                    {leave === "can_leave" && "Contract finished"}
+                    {leave === "stays" && `Stays until ${formatEnd(end)}`}
+                    {leave === "open" && "Set an end date on the contract"}
+                  </p>
+                </div>
               </div>
             </Card>
           ))}

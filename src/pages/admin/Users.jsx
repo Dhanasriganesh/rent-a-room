@@ -13,6 +13,7 @@ import {
   Alert,
   SearchBox,
   matchesQuery,
+  OpenInWhatsApp,
 } from "../../components/ui";
 
 export default function AdminUsers() {
@@ -99,6 +100,7 @@ export default function AdminUsers() {
                 <p className="text-sm text-gray-500">{u.email}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <OpenInWhatsApp phone={u.phone || u.phoneNumber} always />
                 <Badge variant="info">{u.role}</Badge>
                 <Badge variant={u.accountStatus === "suspended" ? "danger" : "success"}>
                   {u.accountStatus || "active"}

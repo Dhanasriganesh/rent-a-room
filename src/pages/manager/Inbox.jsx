@@ -24,6 +24,7 @@ import {
   Tabs,
   SearchBox,
   matchesQuery,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiInbox, FiSend } from "react-icons/fi";
 
@@ -291,6 +292,10 @@ export default function ManagerInbox() {
                     <Badge>{channelOf(selected)}</Badge>
                     <Badge variant="info">{selected.status || "open"}</Badge>
                     <Badge variant="warning">{selected.handoverState || "human"}</Badge>
+                    <OpenInWhatsApp
+                      phone={selected.guestPhone || selected.phone || selected.contactPhone}
+                      always
+                    />
                   </div>
                   <p className="text-sm text-gray-500">
                     {selected.guestEmail || "In-app participants"}

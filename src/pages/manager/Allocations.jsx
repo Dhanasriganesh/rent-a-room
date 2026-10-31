@@ -25,6 +25,7 @@ import {
   Badge,
   SearchBox,
   matchesQuery,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiKey } from "react-icons/fi";
 
@@ -135,6 +136,10 @@ export default function ManagerAllocations() {
     const a = applications.find((x) => x.id === id);
     return a?.applicantName || a?.applicantEmail || id?.slice(0, 8) || "—";
   };
+  const appPhone = (allocation) =>
+    allocation?.applicantPhone ||
+    applications.find((x) => x.id === allocation?.applicationId)?.applicantPhone ||
+    "";
 
   const onPickBed = async (bedId) => {
     setForm((p) => ({ ...p, bedId }));
@@ -342,6 +347,7 @@ export default function ManagerAllocations() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <OpenInWhatsApp phone={appPhone(a)} always />
                   <Button
                     size="sm"
                     variant="outline"

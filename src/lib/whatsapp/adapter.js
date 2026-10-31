@@ -45,6 +45,15 @@ export function normalizeE164(input) {
   return String(input || "").replace(/\D/g, "");
 }
 
+/** Chat deep link for a contact phone. Returns null when the number is unusable. */
+export function whatsAppChatUrl(phone, { text } = {}) {
+  const digits = normalizeE164(phone);
+  if (!digits || digits.length < 8) return null;
+  const base = `https://wa.me/${digits}`;
+  if (text) return `${base}?text=${encodeURIComponent(String(text))}`;
+  return base;
+}
+
 /** Groups are unsupported on standard Cloud API unless Meta explicitly enables them. */
 export function assertPrivateRecipient(toE164) {
   const n = normalizeE164(toE164);

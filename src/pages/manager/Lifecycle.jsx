@@ -27,6 +27,7 @@ import {
   SearchBox,
   matchesQuery,
   Checkbox,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiCalendar, FiPlus } from "react-icons/fi";
 
@@ -216,9 +217,12 @@ export default function ManagerLifecycle() {
                     Planned {ev.plannedDate || "—"} · allocation {ev.allocationId?.slice(0, 8)}…
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setDetail(ev)}>
-                  Checklist
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <OpenInWhatsApp phone={ev.applicantPhone} always />
+                  <Button size="sm" variant="outline" onClick={() => setDetail(ev)}>
+                    Checklist
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
@@ -289,10 +293,13 @@ export default function ManagerLifecycle() {
         {detail && (
           <div className="space-y-4">
             {error && <Alert variant="error">{error}</Alert>}
-            <p className="text-sm text-gray-600">
-              {detail.applicantName || "Tenant"} · {detail.plannedDate || "no date"} ·{" "}
+            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+              <span>
+                {detail.applicantName || "Tenant"} · {detail.plannedDate || "no date"}
+              </span>
               <Badge>{detail.status}</Badge>
-            </p>
+              <OpenInWhatsApp phone={detail.applicantPhone} always />
+            </div>
             <ul className="space-y-3">
               {checklistDefs(detail.type).map((item) => {
                 const state = detail.checklist?.[item.key] || { done: false };

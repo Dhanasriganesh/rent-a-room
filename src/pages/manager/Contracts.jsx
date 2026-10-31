@@ -41,6 +41,7 @@ import {
   Badge,
   SearchBox,
   matchesQuery,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiFileText, FiUpload } from "react-icons/fi";
 
@@ -531,6 +532,10 @@ export default function ManagerContracts() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <OpenInWhatsApp
+                      phone={c.applicantPhone || c.fieldValues?.tenant_phone}
+                      always
+                    />
                     <Button size="sm" variant="outline" onClick={() => setViewContract(c)}>
                       Open
                     </Button>

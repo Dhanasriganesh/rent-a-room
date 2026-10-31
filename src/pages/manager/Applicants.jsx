@@ -29,6 +29,7 @@ import {
   Textarea,
   Alert,
   Badge,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiPlus, FiInbox, FiKey, FiArrowLeft, FiFileText, FiHome } from "react-icons/fi";
 
@@ -540,6 +541,11 @@ export default function ManagerApplicants() {
                             Bed: {place}
                           </span>
                         ) : null}
+                        {app.applicantPhone ? (
+                          <span className="mt-1 block" onClick={(e) => e.stopPropagation()}>
+                            <OpenInWhatsApp phone={app.applicantPhone} size="xs" stopPropagation />
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   </li>
@@ -588,6 +594,7 @@ export default function ManagerApplicants() {
                         {statusLabel(detail.status)}
                       </span>
                       {sourceLabel(detail.source) && <Badge>{sourceLabel(detail.source)}</Badge>}
+                      <OpenInWhatsApp phone={detail.applicantPhone} always />
                     </div>
                   </div>
                 </div>
@@ -643,7 +650,10 @@ export default function ManagerApplicants() {
                   </div>
                   <div>
                     <dt className="text-[11px] uppercase tracking-wide text-gray-400">Phone</dt>
-                    <dd className="text-gray-800">{detail.applicantPhone || "—"}</dd>
+                    <dd className="flex flex-wrap items-center gap-2 text-gray-800">
+                      <span>{detail.applicantPhone || "—"}</span>
+                      <OpenInWhatsApp phone={detail.applicantPhone} always size="xs" />
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-[11px] uppercase tracking-wide text-gray-400">Move-in</dt>

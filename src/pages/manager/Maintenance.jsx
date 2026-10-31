@@ -26,6 +26,7 @@ import {
   Badge,
   SearchBox,
   matchesQuery,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { FiTool, FiPlus } from "react-icons/fi";
 
@@ -100,6 +101,7 @@ export default function ManagerMaintenance() {
           allocationId: form.allocationId || null,
           tenantUserId: alloc?.tenantUserId || null,
           applicantName: alloc?.applicantName || "",
+          applicantPhone: alloc?.applicantPhone || "",
         },
         user.uid
       );
@@ -187,9 +189,12 @@ export default function ManagerMaintenance() {
                     {t.applicantName || "—"}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setDetail(t)}>
-                  Manage
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <OpenInWhatsApp phone={t.applicantPhone} always />
+                  <Button size="sm" variant="outline" onClick={() => setDetail(t)}>
+                    Manage
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
@@ -260,6 +265,10 @@ export default function ManagerMaintenance() {
       <Modal isOpen={!!detail} onClose={() => setDetail(null)} title={detail?.title || "Ticket"} size="md">
         {detail && (
           <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-gray-700">{detail.applicantName || "Tenant"}</p>
+              <OpenInWhatsApp phone={detail.applicantPhone} always />
+            </div>
             <p className="text-sm text-gray-600">{detail.description || "No description"}</p>
             <Select
               label="Status"

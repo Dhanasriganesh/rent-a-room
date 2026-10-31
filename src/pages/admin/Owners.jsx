@@ -21,6 +21,7 @@ import {
   Input,
   Select,
   Alert,
+  OpenInWhatsApp,
 } from "../../components/ui";
 import { serverTimestamp } from "firebase/firestore";
 
@@ -190,6 +191,7 @@ export default function AdminOwners() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <OpenInWhatsApp phone={owner.phone || owner.phoneNumber} always />
                 <Select
                   value={owner.profile?.subscriptionPlanId || "starter"}
                   onChange={(e) => setPlan(owner.id, e.target.value)}
@@ -215,9 +217,13 @@ export default function AdminOwners() {
       <Modal isOpen={Boolean(selected)} onClose={() => setSelected(null)} title="Owner account">
         {selected && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              {selected.displayName} · joined {formatDate(selected.createdAt?.toDate?.() || selected.createdAt)}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+              <span>
+                {selected.displayName} · joined{" "}
+                {formatDate(selected.createdAt?.toDate?.() || selected.createdAt)}
+              </span>
+              <OpenInWhatsApp phone={selected.phone || selected.phoneNumber} always />
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 loading={saving}

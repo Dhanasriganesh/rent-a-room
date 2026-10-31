@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   createOwnerRecord,
   getAllOwners,
-  updateOwnerRecord,
   getPropertiesByOwnerRecord,
 } from "../../lib/firestore";
 import {
@@ -21,15 +20,16 @@ import {
   Textarea,
   Alert,
   Badge,
+  OpenInWhatsApp,
 } from "../../components/ui";
-import { FiPlus, FiUsers, FiEdit2, FiHome } from "react-icons/fi";
+import { FiPlus, FiUsers, FiHome, FiChevronRight } from "react-icons/fi";
 
 export default function ManagerOwners() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -69,7 +69,6 @@ export default function ManagerOwners() {
   }, []);
 
   const openCreate = () => {
-    setEditing(null);
     setForm({
       fullName: "",
       legalName: "",
@@ -84,22 +83,6 @@ export default function ManagerOwners() {
     setModalOpen(true);
   };
 
-  const openEdit = (owner) => {
-    setEditing(owner);
-    setForm({
-      fullName: owner.fullName || "",
-      legalName: owner.legalName || "",
-      contactEmail: owner.contactEmail || "",
-      phoneNumber: owner.phoneNumber || "",
-      address: owner.address || "",
-      preferredContactChannel: owner.preferredContactChannel || "email",
-      notes: owner.notes || "",
-      status: owner.status || "active",
-      linkedUserId: owner.linkedUserId || "",
-    });
-    setModalOpen(true);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -109,13 +92,9 @@ export default function ManagerOwners() {
         ...form,
         linkedUserId: form.linkedUserId.trim() || null,
       };
-      if (editing) {
-        await updateOwnerRecord(editing.id, payload, user.uid);
-      } else {
-        await createOwnerRecord(payload, user.uid);
-      }
+      const id = await createOwnerRecord(payload, user.uid);
       setModalOpen(false);
-      await load();
+      navigate(`/manager/owners/${id}`);
     } catch (err) {
       setError(err.message || "Save failed");
     } finally {
@@ -164,47 +143,62 @@ export default function ManagerOwners() {
         <div className="space-y-3">
           {visibleOwners.length === 0 ? (
             <p className="text-sm text-gray-500">No owners match that search.</p>
-          ) : visibleOwners.map((owner) => (
-            <Card key={owner.id} className="!p-3 sm:!p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold text-gray-900">{owner.fullName}</h3>
-                    <Badge variant={owner.status === "active" ? "success" : "default"}>
-                      {owner.status}
-                    </Badge>
+          ) : (
+            visibleOwners.map((owner) => (
+              <Card
+                key={owner.id}
+                className="!p-0 transition hover:border-gray-300 hover:shadow-sm"
+              >
+                <Link
+                  to={`/manager/owners/${owner.id}`}
+                  className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:!p-4"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-gray-900">{owner.fullName}</h3>
+                      <Badge variant={owner.status === "active" ? "success" : "default"}>
+                        {owner.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 break-all text-sm text-gray-500">
+                      {owner.contactEmail}
+                      {owner.phoneNumber ? ` · ${owner.phoneNumber}` : ""}
+                    </p>
+                    <p className="mt-1 flex items-center gap-1 text-sm text-gray-600">
+                      <FiHome className="h-4 w-4" />
+                      {owner.propertyCount} propert
+                      {owner.propertyCount === 1 ? "y" : "ies"}
+                      {owner.linkedUserId
+                        ? ` · linked user ${owner.linkedUserId.slice(0, 8)}…`
+                        : ""}
+                    </p>
                   </div>
-                  <p className="mt-1 break-all text-sm text-gray-500">
-                    {owner.contactEmail}
-                    {owner.phoneNumber ? ` · ${owner.phoneNumber}` : ""}
-                  </p>
-                  <p className="mt-1 flex items-center gap-1 text-sm text-gray-600">
-                    <FiHome className="h-4 w-4" />
-                    {owner.propertyCount} propert{owner.propertyCount === 1 ? "y" : "ies"}
-                    {owner.linkedUserId ? ` · linked user ${owner.linkedUserId.slice(0, 8)}…` : ""}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => openEdit(owner)}>
-                    <FiEdit2 /> Edit
-                  </Button>
-                  <Link
-                    to={`/manager/properties?ownerRecordId=${owner.id}`}
-                    className="inline-flex items-center rounded-lg border-2 border-gray-200 px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
-                  >
-                    Properties
-                  </Link>
-                </div>
-              </div>
-            </Card>
-          ))}
+                  <span className="flex flex-wrap items-center gap-2">
+                    {owner.phoneNumber ? (
+                      <span
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
+                        <OpenInWhatsApp phone={owner.phoneNumber} size="xs" stopPropagation />
+                      </span>
+                    ) : null}
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+                      Open <FiChevronRight />
+                    </span>
+                  </span>
+                </Link>
+              </Card>
+            ))
+          )}
         </div>
       )}
 
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? "Edit owner" : "Add owner"}
+        title="Add owner"
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">

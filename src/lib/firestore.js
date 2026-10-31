@@ -1049,6 +1049,7 @@ export async function generateMonthlyRentCharges(
       responsibleTenantId: allocation.tenantUserId || null,
       applicantName: allocation.applicantName || "",
       applicantEmail: allocation.applicantEmail || "",
+      applicantPhone: allocation.applicantPhone || "",
       ownerId: allocation.ownerId || null,
       ownerRecordId: allocation.ownerRecordId || null,
       period,
@@ -2771,6 +2772,119 @@ export async function updateOwnerRecord(ownerId, data, actorUserId = null) {
   }
 }
 
+/**
+ * Full owner CRM record for staff: profile, linked login, properties, beds, applicants, contracts.
+ */
+export async function getOwnerDossier(ownerRecordId) {
+  const owner = await getOwnerRecord(ownerRecordId);
+  if (!owner) throw new Error("Owner not found");
+
+  const [properties, linkedUser, applicationsByOwner, contractsByOwner] =
+    await Promise.all([
+      getPropertiesByOwnerRecord(ownerRecordId),
+      owner.linkedUserId
+        ? getDocument(COLLECTIONS.USERS, owner.linkedUserId).catch(() => null)
+        : Promise.resolve(null),
+      queryDocuments(
+        COLLECTIONS.APPLICATIONS,
+        [{ field: "ownerRecordId", operator: "==", value: ownerRecordId }],
+        { field: "submittedAt", direction: "desc" },
+        100
+      ).catch(() => []),
+      queryDocuments(
+        COLLECTIONS.CONTRACTS,
+        [{ field: "ownerRecordId", operator: "==", value: ownerRecordId }],
+        { field: "createdAt", direction: "desc" },
+        100
+      ).catch(() => []),
+    ]);
+
+  const perProperty = await Promise.all(
+    properties.map(async (property) => {
+      const [rooms, beds, apps, allocs, contracts] = await Promise.all([
+        getRoomsByProperty(property.id).catch(() => []),
+        getBedsByProperty(property.id).catch(() => []),
+        queryDocuments(
+          COLLECTIONS.APPLICATIONS,
+          [{ field: "propertyId", operator: "==", value: property.id }],
+          { field: "submittedAt", direction: "desc" },
+          50
+        ).catch(() => []),
+        queryDocuments(
+          COLLECTIONS.ALLOCATIONS,
+          [{ field: "propertyId", operator: "==", value: property.id }],
+          { field: "createdAt", direction: "desc" },
+          50
+        ).catch(() => []),
+        queryDocuments(
+          COLLECTIONS.CONTRACTS,
+          [{ field: "propertyId", operator: "==", value: property.id }],
+          { field: "createdAt", direction: "desc" },
+          50
+        ).catch(() => []),
+      ]);
+
+      const roomById = Object.fromEntries(rooms.map((r) => [r.id, r]));
+      const enrichedBeds = beds.map((bed) => ({
+        ...bed,
+        roomLabel: roomById[bed.roomId]?.label || bed.roomLabel || "",
+        occupantName: bed.currentApplicantName || "",
+        occupantEmail: bed.currentApplicantEmail || "",
+        applicationId: bed.currentApplicationId || null,
+      }));
+
+      return {
+        property: {
+          ...property,
+          rooms,
+          beds: enrichedBeds,
+          roomCount: rooms.length,
+          bedCount: beds.length,
+          availableBeds: beds.filter((b) => b.status === "available").length,
+          reservedBeds: beds.filter((b) => b.status === "reserved").length,
+          occupiedBeds: beds.filter((b) => b.status === "occupied").length,
+        },
+        apps,
+        allocs,
+        contracts,
+      };
+    })
+  );
+
+  const propertiesDetailed = perProperty.map((row) => row.property);
+
+  const appsById = new Map(applicationsByOwner.map((a) => [a.id, a]));
+  const contractsById = new Map(contractsByOwner.map((c) => [c.id, c]));
+  const allocationsById = new Map();
+  for (const row of perProperty) {
+    for (const app of row.apps) appsById.set(app.id, app);
+    for (const c of row.contracts) contractsById.set(c.id, c);
+    for (const a of row.allocs) allocationsById.set(a.id, a);
+  }
+
+  const totals = propertiesDetailed.reduce(
+    (acc, p) => {
+      acc.rooms += p.roomCount;
+      acc.beds += p.bedCount;
+      acc.available += p.availableBeds;
+      acc.reserved += p.reservedBeds;
+      acc.occupied += p.occupiedBeds;
+      return acc;
+    },
+    { rooms: 0, beds: 0, available: 0, reserved: 0, occupied: 0 }
+  );
+
+  return {
+    owner,
+    linkedUser,
+    properties: propertiesDetailed,
+    applications: [...appsById.values()],
+    allocations: [...allocationsById.values()],
+    contracts: [...contractsById.values()],
+    totals,
+  };
+}
+
 export async function createRoom(propertyId, data, actorUserId = null) {
   const property = await getDocument(COLLECTIONS.PROPERTIES, propertyId);
   if (!property) throw new Error("Property not found");
@@ -3221,6 +3335,7 @@ export async function allocateBedAtomically(
 
     const applicantName = app.applicantName || "";
     const applicantEmail = String(app.applicantEmail || "").trim().toLowerCase();
+    const applicantPhone = app.applicantPhone || "";
     const bedLabel = bed.label || "";
 
     placementSnapshot = {
@@ -3229,6 +3344,7 @@ export async function allocateBedAtomically(
       tenantUserId: app.renterId || null,
       applicantName,
       applicantEmail,
+      applicantPhone,
       propertyId: bed.propertyId,
       propertyName,
       roomId: bed.roomId,
@@ -3245,6 +3361,7 @@ export async function allocateBedAtomically(
       tenantUserId: app.renterId || null,
       applicantName,
       applicantEmail,
+      applicantPhone,
       propertyId: bed.propertyId,
       propertyName,
       roomId: bed.roomId,
@@ -3934,6 +4051,11 @@ export async function generateContractDraft(
     tenantUserId: context.tenantUserId,
     applicantName: fields.tenant_full_name,
     applicantEmail: context.application?.applicantEmail || context.allocation.applicantEmail || "",
+    applicantPhone:
+      fields.tenant_phone ||
+      context.application?.applicantPhone ||
+      context.allocation.applicantPhone ||
+      "",
     ownerRecordId: context.ownerRecordId,
     propertyId: context.propertyId,
     allocationId,
@@ -4506,6 +4628,7 @@ export async function createMaintenanceTicket(data, actorUserId) {
   const payload = {
     tenantUserId: data.tenantUserId || null,
     applicantName: data.applicantName || "",
+    applicantPhone: data.applicantPhone || "",
     propertyId: data.propertyId || null,
     roomId: data.roomId || null,
     bedId: data.bedId || null,
@@ -4599,6 +4722,7 @@ export async function createMoveEvent(
     bedId: allocation.bedId || null,
     tenantUserId: allocation.tenantUserId || null,
     applicantName: allocation.applicantName || "",
+    applicantPhone: allocation.applicantPhone || "",
     plannedDate: plannedDate || allocation.startDate || null,
     checklist: emptyChecklist(items),
     notes: notes || "",
