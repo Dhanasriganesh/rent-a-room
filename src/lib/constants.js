@@ -111,14 +111,12 @@ export const CONTRACT_PLACEHOLDERS = [
   { key: "contract_reference", label: "Contract reference", required: true },
   { key: "currency", label: "Currency", required: false },
 ];
-
 export const DOCUMENT_CATEGORIES = [
   { value: "rental_agreement", label: "Rental agreement" },
   { value: "anmeldung", label: "Anmeldung" },
   { value: "contract", label: "Contract document" },
   { value: "other", label: "Other" },
 ];
-
 export const MAINTENANCE_CATEGORIES = [
   { value: "plumbing", label: "Plumbing" },
   { value: "electrical", label: "Electrical" },
